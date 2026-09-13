@@ -14,7 +14,17 @@
 
 This repository is a Pi extension project. Use the `pi-extension-dev` skill for setup, implementation, validation, and review work.
 
-## Realtime interaction / communication model
+## Browser voice companion (current default)
+
+- Browser agent mode uses a server-owned companion in `companion/`, hosted by the loopback helper. Pi owns work; the voice model owns spoken interaction and independently observes ordinary visible Pi output.
+- Voice uses `post_message(message, origin)` to queue a user-directed or voice-initiated message. Preserve origin and follow-up delivery; lifecycle notifications use `nextTurn` without triggering a turn. Device disconnect/restart must never interrupt Pi work.
+- Voice-side history and handover remain private to the companion. Read-only history/status tools are bounded and scoped to the attached Pi session/current branch; exclude private reasoning and raw tool results.
+- One device owns an audio lease. Takeover, stale tokens, heartbeat expiry, branch/session replacement, provider expiry, and shutdown must close the correct provider resources. The browser is not trusted to execute model tools or enforce ownership.
+- Do not add `realtime_send_*` calls to ordinary Pi work for companion mode. It observes normal outputs; legacy speech-push tools return a skipped receipt in this mode.
+- Preserve native VAD/interruption and separate accounting. Provider audio goes directly over WebRTC; an authenticated server-side control connection observes the same session.
+- See `apps/pi-agents/VOICE-PLAN.md` and `apps/pi-agents/README.md` for lifecycle, tests, and deployment constraints.
+
+## Legacy raw/eco interaction / communication model
 
 - Treat realtime voice as the frontend/interface and Pi as the backend worker/main agent. This is an internal architecture model, not language to expose to the user.
 - The realtime model should do only shallow interaction work: listen, clarify, and communicate user intent. It should not perform backend task reasoning, inspect Pi state to answer work questions, chain tools, or infer completion from residual context.

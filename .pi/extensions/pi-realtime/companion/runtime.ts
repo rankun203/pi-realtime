@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { companionInstructions, companionTools, startupContext } from "./prompt";
+import { boundedMessages, companionInstructions, companionTools, startupContext } from "./prompt";
 import type { CompanionOptions, PiSnapshot, VoiceConnection, VoiceEvent, VoiceMemory } from "./types";
 
 type Lease = { token: string; seenAt: number; startedAt: number; connection?: VoiceConnection; speaking: boolean; responding: boolean; playing: boolean; awaitingNative: boolean; pending: boolean; restart: boolean; noticeSent: boolean; toolIds: Set<string>; toolsPending: number };
@@ -99,7 +99,7 @@ export class VoiceCompanion {
   const changed = pi.messages.filter(m => !this.snapshot.messages.some(previous => previous.id === m.id));
   this.snapshot = { ...pi, messages: [...pi.messages] };
   if (!this.lease?.connection || !changed.length) return;
-  const recent = changed.slice(-8).map(m => ({ ...m, text: m.text.slice(0, 2500) }));
+  const recent = boundedMessages(changed, 8, 8000);
   this.send({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: JSON.stringify({ type: "pi_observation", busy: pi.busy, messages: recent }) }] } });
   this.memory.observedIds = [...this.memory.observedIds, ...recent.map(m => m.id)].slice(-200);
   this.save();
@@ -127,6 +127,10 @@ export class VoiceCompanion {
   if (event.type === "response.created") { lease.responding = true; lease.awaitingNative = false; }
   if (event.type === "output_audio_buffer.started") lease.playing = true;
   if (["output_audio_buffer.stopped", "output_audio_buffer.cleared"].includes(event.type)) lease.playing = false;
+  if (event.type === "error") {
+   lease.responding = false; lease.awaitingNative = false;
+   if (String(event.error?.code).includes("context_length")) { lease.restart = true; lease.playing = false; }
+  }
   if (event.type === "response.done") {
    lease.responding = false;
    if (Number(event.response?.usage?.input_tokens) > 16000) this.requestRestart();
@@ -151,12 +155,14 @@ export class VoiceCompanion {
    if (event.name === "post_message") {
     if (typeof args.message !== "string" || !args.message.trim() || args.message.length > 12000 || !["user", "voice"].includes(args.origin)) throw new Error("Expected message (1–12000 characters) and origin=user|voice");
     await this.options.bridge.postMessage(args.message, args.origin);
+    this.memory.turns.push({ id: `post-${event.call_id}`, role: args.origin === "user" ? "user" : "assistant", text: args.message, at: this.now(), source: "Voice → Pi" });
+    this.memory.turns = this.memory.turns.slice(-24); this.save();
     result = { posted: true, delivery: "queued", note: "Pi continues normally. Observe its forthcoming output." };
    } else if (event.name === "get_pi_status") {
     const pi = this.options.bridge.snapshot();
     result = { sessionId: pi.sessionId, branchId: pi.branchId, busy: pi.busy, recent: pi.messages.slice(-4).map(m => ({ ...m, text: m.text.slice(0, 2000) })) };
    } else if (event.name === "read_pi_history") {
-    result = this.options.bridge.history(typeof args.before_id === "string" ? args.before_id : undefined, Math.max(1, Math.min(20, Math.floor(Number(args.limit) || 10)))).map(m => ({ ...m, text: m.text.slice(0, 3000) }));
+    result = boundedMessages(this.options.bridge.history(typeof args.before_id === "string" ? args.before_id : undefined, Math.max(1, Math.min(20, Math.floor(Number(args.limit) || 10)))), 20, 8000);
    } else if (["save_voice_memory", "restart_voice"].includes(event.name)) {
     if (typeof args.summary !== "string" || args.summary.length > 4000) throw new Error("Handover must be a string of at most 4000 characters");
     this.memory.summary = args.summary; this.save(); result = { saved: true };

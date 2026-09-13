@@ -26,6 +26,12 @@ export function companionTools(): VoiceEvent[] {
  ];
 }
 
+export function boundedMessages(messages: PiSnapshot["messages"], count: number, bytes: number): PiSnapshot["messages"] {
+ const rows = messages.slice(-count);
+ const each = Math.max(1, Math.floor(bytes / Math.max(1, rows.length)));
+ return rows.map(m => ({ ...m, text: Buffer.from(m.text).subarray(0, each).toString("utf8") }));
+}
+
 export function startupContext(pi: PiSnapshot, memory: VoiceMemory): string {
- return JSON.stringify({ type: "startup_context", pi: { sessionId: pi.sessionId, branchId: pi.branchId, project: pi.project, busy: pi.busy, recent: pi.messages.slice(-8).map(m => ({ ...m, text: m.text.slice(0, 2500) })) }, voice: { handover: memory.summary, recent: memory.turns.slice(-8).map(m => ({ ...m, text: m.text.slice(0, 1500) })), playbackCaveat: "These are generated transcripts, not proof of completed playback. An interrupted or detached turn may need a brief recap." }, unseenPiMessages: pi.messages.filter(m => !memory.observedIds.includes(m.id)).slice(-6).map(m => ({ ...m, text: m.text.slice(0, 2000) })) });
+ return JSON.stringify({ type: "startup_context", pi: { sessionId: pi.sessionId, branchId: pi.branchId, project: pi.project, busy: pi.busy, recent: boundedMessages(pi.messages, 6, 4000) }, voice: { handover: Buffer.from(memory.summary).subarray(0, 4000).toString("utf8"), recent: boundedMessages(memory.turns, 6, 3000), playbackCaveat: "These are generated transcripts and posted-message references, not proof of completed playback. An interrupted or detached turn may need a brief recap." }, unseenPiMessages: boundedMessages(pi.messages.filter(m => !memory.observedIds.includes(m.id)), 3, 2000) });
 }

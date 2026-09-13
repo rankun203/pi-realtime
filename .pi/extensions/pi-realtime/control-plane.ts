@@ -20,12 +20,15 @@ export type ControlPlane = {
 };
 
 export function createControlPlane(pi: ExtensionAPI, store: Store, getContext: () => ExtensionContext | undefined): ControlPlane {
-	let branchId = "root";
 	const context = () => { const ctx = getContext(); if (!ctx) throw new Error("Pi session is closed"); return ctx; };
 	return {
-		branchChanged(ctx) { branchId = ctx.sessionManager.getLeafId() ?? "root"; },
+		branchChanged(ctx) { pi.appendEntry("pi-voice.branch", { id: ctx.sessionManager.getLeafId() ?? "root" }); },
 		voiceBridge: () => ({
-			snapshot() { const ctx = context(); return { sessionId: ctx.sessionManager.getSessionId(), branchId, project: ctx.cwd, busy: !ctx.isIdle(), messages: branchChatMessages(ctx.sessionManager.getBranch()) }; },
+			snapshot() {
+				const ctx = context(); const entries = ctx.sessionManager.getBranch();
+				const marker = entries.filter(entry => entry.type === "custom" && entry.customType === "pi-voice.branch").at(-1) as { data?: { id?: string } } | undefined;
+				return { sessionId: ctx.sessionManager.getSessionId(), branchId: marker?.data?.id ?? "root", project: ctx.cwd, busy: !ctx.isIdle(), messages: branchChatMessages(entries) };
+			},
 			history(before, limit = 10) {
 				const rows = branchChatMessages(context().sessionManager.getBranch(), Number.MAX_SAFE_INTEGER);
 				const index = before ? rows.findIndex(row => row.id === before) : rows.length;
