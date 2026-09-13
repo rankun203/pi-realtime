@@ -8,6 +8,23 @@ import { providerInteractionFor } from "../../.pi/extensions/pi-realtime/domain/
 import { buildOpenAIRealtimeAudioConfig, openAIRealtimeAudioInput } from "../../.pi/extensions/pi-realtime/providers/openai/session-config";
 import { OpenAIRealtimeProviderAdapter } from "../../.pi/extensions/pi-realtime/providers/openai/index";
 
+import { defaultVoiceToolSurface, voiceSystemPrompt, voiceSpeechRendererPrompt } from "../../.pi/extensions/pi-realtime/prompt";
+
+test("voice identity distinguishes in-app conversation from external dialing", () => {
+ const surface = defaultVoiceToolSurface();
+ const prompt = voiceSystemPrompt(surface);
+ assert.match(prompt, /receive live user audio and reply with spoken audio/);
+ assert.match(prompt, /Start call opens the browser microphone\/speaker connection/);
+ assert.match(prompt, /unless the user explicitly means an external person or phone number/);
+ assert.match(prompt, /No telephone dialing tool is available/);
+ assert.match(prompt, /default action for user audio is to call request/);
+ for (const mode of ["strict_verbatim", "per_response_rendering"] as const) {
+  const renderer = voiceSpeechRendererPrompt(surface, mode);
+  assert.doesNotMatch(renderer, /What would you like to work on/);
+  assert.match(renderer, /ZERO agency/);
+ }
+});
+
 const directory = mkdtempSync(join(tmpdir(), "pi-realtime-native-agent-"));
 const isolatedEnv = { PI_CODING_AGENT_DIR: directory };
 
