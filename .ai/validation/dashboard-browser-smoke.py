@@ -8,7 +8,7 @@ from pathlib import Path
 import subprocess
 import tempfile
 
-from playwright.sync_api import sync_playwright
+from playwright.sync_api import sync_playwright, expect
 
 ROOT = Path(__file__).resolve().parents[2]
 
@@ -81,6 +81,15 @@ def exercise(port):
         assert "voice off" in chat.locator("#status").inner_text()
         assert chat.locator("#start").is_enabled()
         page.screenshot(path=os.environ.get("PI_AGENTS_SCREENSHOT", "/tmp/pi-agents-mobile.png"), full_page=True)
+        page.set_viewport_size({"width": 1440, "height": 1000})
+        expect(page.locator(".sidebar")).to_be_visible()
+        expect(page.locator(".agent-card")).to_have_count(2)
+        other_agent = page.locator('.agent-card[aria-pressed="false"]')
+        name = other_agent.get_attribute("title").split(" · ")[0].split("/")[-1]
+        other_agent.click()
+        expect(chat.locator("#conversation-title")).to_have_text(name)
+        chat.locator("#messages").evaluate("() => window.scrollTo(0, document.documentElement.scrollHeight)")
+        page.screenshot(path=os.environ.get("PI_AGENTS_DESKTOP_SCREENSHOT", "/tmp/pi-agents-desktop.png"), full_page=True)
         assert not errors, errors
         browser.close()
 
