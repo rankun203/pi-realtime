@@ -99,7 +99,7 @@ export function createControlPlane(
 				{
 					customType: REALTIME_SESSION_MESSAGE_TYPE,
 					content: renderRealtimeSessionMessage(session, active),
-					display: true,
+					display: active,
 					details: {
 						providerSessionId: session.providerSessionId,
 						provider: session.provider,

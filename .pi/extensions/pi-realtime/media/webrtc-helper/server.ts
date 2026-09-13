@@ -52,6 +52,7 @@ export function createWebRTCHelperServer(options: HelperOptions = {}): WebRTCHel
 
 class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	private companion: VoiceCompanion | undefined;
+	private readonly pendingClosures = new Set<Promise<void>>();
 	private companionOwner: string | undefined;
 	constructor(private readonly options: HelperOptions) {}
 	private server: Server | undefined;
@@ -86,7 +87,8 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	async stop(): Promise<void> {
 		const server = this.server;
 		if (!server) return;
-		await this.companion?.close();
+		const closures = await Promise.allSettled([...this.pendingClosures, this.companion?.close() ?? Promise.resolve()]);
+		this.pendingClosures.clear();
 		this.companion = undefined;
 		this.companionOwner = undefined;
 		this.sessions.clear();
@@ -94,6 +96,12 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 		this.server = undefined;
 		this.port = undefined;
+		const failures = closures.filter((result): result is PromiseRejectedResult => result.status === "rejected");
+		if (failures.length)
+			throw new AggregateError(
+				failures.map((result) => result.reason),
+				"Voice provider cleanup failed",
+			);
 	}
 
 	registerSession(config: WebRTCHelperRegistrationConfig, sink: WebRTCHelperSink): void {
@@ -167,7 +175,11 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		const session = this.sessions.get(providerSessionId);
 		if (!session) return;
 		if (this.companionOwner === providerSessionId) {
-			void this.companion?.close().catch(() => {});
+			const closing = this.companion?.close();
+			if (closing) {
+				this.pendingClosures.add(closing);
+				void closing.catch(() => {}); // Observed and reported by stop(), even after unregistering.
+			}
 			this.companion = undefined;
 			this.companionOwner = undefined;
 		}

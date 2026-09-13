@@ -1,7 +1,80 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { mkdtempSync, rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
+import { setImmediate as settle } from "node:timers/promises";
 import { branchChatMessages } from "../../.pi/extensions/pi-realtime/dashboard";
 import { createWebRTCHelperServer } from "../../.pi/extensions/pi-realtime/media/webrtc-helper/server";
+
+test("helper stop waits for unregistered companion teardown and removes the listener", async () => {
+	const directory = mkdtempSync(join(tmpdir(), "pi-stop-helper-"));
+	const previous = process.env.PI_CODING_AGENT_DIR;
+	process.env.PI_CODING_AGENT_DIR = directory;
+	let release!: () => void;
+	const gate = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+	const helper = createWebRTCHelperServer({
+		stateDirectory: directory,
+		voiceTransport: {
+			async connect() {
+				return {
+					answer: "v=0",
+					send() {},
+					async close() {
+						await gate;
+					},
+				};
+			},
+		},
+	});
+	helper.setDashboard!({
+		snapshot: () => ({ project: "demo", usage: "none", messages: [] }),
+		async sendMessage() {},
+		pi: {
+			snapshot: () => ({ sessionId: "test", branchId: "root", project: "demo", busy: false, messages: [] }),
+			history: () => [],
+			async postMessage() {},
+			lifecycle() {},
+		},
+	});
+	try {
+		await helper.start();
+		helper.registerSession(
+			{
+				provider: "openai",
+				providerSessionId: "test",
+				model: "test",
+				interaction: { mode: "agent" },
+				createClientSecret: async () => ({}),
+			} as any,
+			{ onProviderEvent() {} },
+		);
+		const base = helper.urlFor("test");
+		assert.equal(
+			(await fetch(`${base}/voice-connect`, { method: "POST", body: JSON.stringify({ sdp: "v=0" }) })).status,
+			200,
+		);
+		helper.unregisterSession("test", "user");
+		let stopped = false;
+		const stop = helper.stop().then(() => {
+			stopped = true;
+		});
+		await settle();
+		assert.equal(stopped, false);
+		release();
+		await stop;
+		assert.match(helper.status(), /stopped/);
+		await assert.rejects(fetch(`${base}/messages`));
+	} finally {
+		release();
+		await helper.stop();
+		if (previous === undefined) delete process.env.PI_CODING_AGENT_DIR;
+		else process.env.PI_CODING_AGENT_DIR = previous;
+		rmSync(directory, { recursive: true, force: true });
+	}
+});
 
 test("chat projection excludes system, tool output and reasoning", () => {
 	const entries = [

@@ -3,10 +3,11 @@ import { aggregateUsage, formatUsageCost } from "./usage";
 
 export { aggregateUsage, renderUsageSummary } from "./usage";
 
-export function statusText(state: RealtimeState): string {
+export function statusText(state: RealtimeState): string | undefined {
 	const sessions = [...state.sessions.values()];
 	const active = sessions.filter((session) => session.status === "active" || session.status === "starting");
-	const status = active.length === 0 ? "pi-realtime: idle" : `pi-realtime: ${active.length} active`;
+	if (active.length === 0) return undefined;
+	const status = `pi-realtime: ${active.length} active`;
 	const usage = aggregateUsage(state.usage, undefined, state.usageResets);
 	return usage.observations
 		? `${status} · ${usage.totalTokens.toLocaleString("en-US")} voice tokens · ${formatUsageCost(usage)}`

@@ -19,10 +19,16 @@ function state(statuses: string[]): RealtimeState {
 }
 
 test("footer excludes recorded/stopped session totals", () => {
-	assert.equal(statusText(state([])), "pi-realtime: idle");
-	assert.equal(statusText(state(["stopped", "stopped", "stopped"])), "pi-realtime: idle");
+	assert.equal(statusText(state([])), undefined);
+	assert.equal(statusText(state(["stopped", "stopped", "stopped"])), undefined);
 	assert.equal(statusText(state(["active", "stopped", "error"])), "pi-realtime: 1 active");
 	assert.equal(statusText(state(["active", "starting", "stopped"])), "pi-realtime: 2 active");
+});
+
+test("old usage never keeps the stopped footer visible", () => {
+	const stopped = state(["stopped"]);
+	stopped.usage = [{ totalTokens: 1000 }] as any;
+	assert.equal(statusText(stopped), undefined);
 });
 
 test("detailed status still retains session history", () => {
@@ -32,7 +38,7 @@ test("detailed status still retains session history", () => {
 	assert.match(text, /session-2.*error/);
 });
 
-test("startup/reload clears the old widget and sets just the footer", async () => {
+test("startup/reload clears the widget and removes the footer when realtime is inactive", async () => {
 	const handlers = new Map<string, Function>();
 	const widgets: any[] = [],
 		statuses: any[] = [];
@@ -51,5 +57,5 @@ test("startup/reload clears the old widget and sets just the footer", async () =
 	};
 	await handlers.get("session_start")!({ reason: "reload" }, ctx);
 	assert.deepEqual(widgets, [["pi-realtime.widget", undefined]]);
-	assert.deepEqual(statuses, [["pi-realtime", "pi-realtime: idle"]]);
+	assert.deepEqual(statuses, [["pi-realtime", undefined]]);
 });

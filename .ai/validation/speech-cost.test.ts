@@ -92,10 +92,10 @@ test("realtime footer never reports unknown pricing as zero dollars", () => {
 	assert.equal(formatUsageCost(aggregateUsage([row(true)])), "cost unknown");
 	assert.match(formatUsageCost(aggregateUsage([row(false)])), /\$0\.012000 est\./);
 	assert.match(formatUsageCost(aggregateUsage([row(false), row(true)])), /partial/);
-	const state: any = { sessions: new Map(), usage: [row(true)], usageResets: [] };
-	assert.equal(statusText(state), "pi-realtime: idle · 100 voice tokens · cost unknown");
+	const state: any = { sessions: new Map([["voice", { status: "active" }]]), usage: [row(true)], usageResets: [] };
+	assert.equal(statusText(state), "pi-realtime: 1 active · 100 voice tokens · cost unknown");
 	state.usageResets = [{ at: 2 }];
-	assert.equal(statusText(state), "pi-realtime: idle");
+	assert.equal(statusText(state), "pi-realtime: 1 active");
 });
 
 test("provider usage refreshes realtime UI through callback, stored as extension events", async () => {

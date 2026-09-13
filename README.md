@@ -171,7 +171,7 @@ Pi's main `$… (sub)` figure is separate: it totals coding-session usage, inclu
 
 Stopped sessions are kept as history, not running threads; view them with `/realtime status` instead of a persistent session-list widget.
 
-Stop with `/realtime stop`. `/reload` is only needed after installing/updating extension code—not each time you chat. On a server, your SSH tunnel or HTTPS proxy is a separate one-time networking setup; open the printed session path through that connection.
+Stop with `/realtime stop`: this shuts down all realtime sessions and shared media/helper components, removes discovery registration, and clears the realtime footer/widget. Saved history and usage remain available on demand; they do not keep an idle status bar entry visible. Use `/realtime stop --session <id>` to stop only one session while leaving others running. `/reload` is only needed after installing/updating extension code—not each time you chat. On a server, your SSH tunnel or HTTPS proxy is a separate one-time networking setup; open the printed session path through that connection.
 
 For advanced startup, both `/realtime start --provider openai` and `/realtime openai start` honor the WebRTC preference. `/realtime webrtc on` sets the preference for future starts; to attach the browser helper to an already-active session, run `/realtime openai webrtc start`.
 

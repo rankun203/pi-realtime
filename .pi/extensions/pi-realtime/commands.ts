@@ -47,7 +47,7 @@ export async function handleRealtimeCommand(
 				service.statusText(),
 				service.mediaStatus(),
 				"Options:",
-				"/realtime stop — stop the primary session",
+				"/realtime stop — stop all realtime sessions and dismiss its UI",
 				"/realtime start — start or resume browser voice",
 				"/realtime status — session history",
 				"/realtime usage — usage summary",
@@ -127,11 +127,30 @@ async function chat(tokens: string[], ctx: ExtensionCommandContext, service: Ser
 }
 
 async function stop(tokens: string[], ctx: ExtensionCommandContext, service: Service): Promise<void> {
-	const state = service.state();
-	const providerSessionId = valueAfter(tokens, "--session") ?? state.primaryProviderSessionId;
-	if (!providerSessionId) return notify(ctx, "No realtime provider session is active.", "warning");
-	await service.stopSession(providerSessionId, "user");
-	notify(ctx, `Stopped realtime session ${providerSessionId}.`);
+	const providerSessionId = valueAfter(tokens, "--session");
+	if (providerSessionId) {
+		await service.stopSession(providerSessionId, "user");
+		return notify(ctx, `Stopped realtime session ${providerSessionId}.`);
+	}
+	const errors: string[] = [];
+	for (const session of service.state().sessions.values()) {
+		if (session.status === "stopped") continue;
+		try {
+			await service.stopSession(session.providerSessionId, "user");
+		} catch (error) {
+			errors.push(error instanceof Error ? error.message : String(error));
+		}
+	}
+	try {
+		await service.stopSessionMedia();
+	} catch (error) {
+		errors.push(error instanceof Error ? error.message : String(error));
+	}
+	notify(
+		ctx,
+		errors.length ? `Realtime cleanup needs attention: ${errors.join("; ")}` : "Realtime stopped.",
+		errors.length ? "warning" : "info",
+	);
 }
 
 function primary(tokens: string[], ctx: ExtensionCommandContext, service: Service): void {
@@ -441,7 +460,7 @@ function helpText(): string {
 		"/realtime openai webrtc start|stop|status — use localhost browser/WebRTC media with echo cancellation",
 		"/realtime fake transcript <text>",
 		"/realtime fake tool <tool_name> <json>",
-		"/realtime stop [--session <id>]",
+		"/realtime stop [--session <id>] — stop all realtime activity, or just the specified session",
 		"/realtime mode agent|eco — set default interaction mode for future sessions",
 		"/realtime primary <providerSessionId>",
 		"/realtime citations — inspect current Pinotator citation deck",

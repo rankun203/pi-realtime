@@ -42,6 +42,50 @@ function fixture(autoMediaMode?: string) {
 	return { calls, messages, ctx, service };
 }
 
+test("bare stop shuts down every session and shared media; explicit session stop stays scoped", async () => {
+	for (const command of ["stop", "stop --session first"]) {
+		const f = fixture();
+		f.service.state = () => ({
+			sessions: new Map([
+				["first", { providerSessionId: "first", status: "active" }],
+				["second", { providerSessionId: "second", status: "active" }],
+				["old", { providerSessionId: "old", status: "stopped" }],
+			]),
+		});
+		f.service.stopSession = async (id: string) => {
+			f.calls.push(id);
+		};
+		f.service.stopSessionMedia = async () => {
+			f.calls.push("shared media");
+		};
+		await handleRealtimeCommand(command, f.ctx, f.service);
+		assert.deepEqual(f.calls, command === "stop" ? ["first", "second", "shared media"] : ["first"]);
+	}
+});
+
+test("stop still cleans shared components when idle, and attempts remaining cleanup after a failure", async () => {
+	const f = fixture();
+	f.service.stopSessionMedia = async () => {
+		f.calls.push("shared media");
+	};
+	await handleRealtimeCommand("stop", f.ctx, f.service);
+	assert.deepEqual(f.calls, ["shared media"]);
+	f.calls.length = 0;
+	f.service.state = () => ({
+		sessions: new Map([
+			["bad", { providerSessionId: "bad", status: "active" }],
+			["good", { providerSessionId: "good", status: "active" }],
+		]),
+	});
+	f.service.stopSession = async (id: string) => {
+		f.calls.push(id);
+		if (id === "bad") throw new Error("teardown failed");
+	};
+	await handleRealtimeCommand("stop", f.ctx, f.service);
+	assert.deepEqual(f.calls, ["bad", "good", "shared media"]);
+	assert.match(f.messages.at(-1)!.text, /cleanup needs attention/);
+});
+
 test("generic and provider-specific start both honor automatic WebRTC", async () => {
 	for (const command of ["start --provider openai", "openai start"]) {
 		const f = fixture("webrtc");
