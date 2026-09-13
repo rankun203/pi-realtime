@@ -27,17 +27,18 @@ const REALTIME_COMMANDS: Record<string, RealtimeCommandHandler> = {
 export async function handleRealtimeCommand(args: string, ctx: ExtensionCommandContext, service: Service): Promise<void> {
 	service.refresh(ctx);
 	const tokens = tokenize(args);
-	const [cmd = "status", ...rest] = tokens;
+	const [cmd = "start", ...rest] = tokens;
 	const handler = REALTIME_COMMANDS[cmd];
 	if (!handler) return notify(ctx, `Unknown /realtime command: ${cmd}\n${helpText()}`, "warning");
 	await handler(rest, ctx, service);
 }
 
 export function realtimeCompletions(): string[] {
-	return ["chat", "status", "start --provider fake --mode agent", "start --provider openai --mode eco", "mode agent", "mode eco", "text", "mic start", "mic stop", "audio start", "audio stop", "webrtc on", "webrtc off", "openai", "openai start --mode eco", "openai model", "openai model gpt-realtime-mini", "openai model gpt-realtime-2", "openai stop", "openai text", "openai mic start", "openai mic stop", "openai audio start", "openai audio stop", "openai webrtc start", "openai webrtc stop", "openai webrtc status", "usage", "usage --details", "usage reset", "debug", "fake transcript", "fake tool request {\"request\":\"...\"}", "stop", "primary", "citations", "help"];
+	return ["start", "status", "start --provider fake --mode agent", "start --provider openai --mode eco", "mode agent", "mode eco", "text", "mic start", "mic stop", "audio start", "audio stop", "webrtc on", "webrtc off", "openai", "openai start --mode eco", "openai model", "openai model gpt-realtime-mini", "openai model gpt-realtime-2", "openai stop", "openai text", "openai mic start", "openai mic stop", "openai audio start", "openai audio stop", "openai webrtc start", "openai webrtc stop", "openai webrtc status", "usage", "usage --details", "usage reset", "debug", "fake transcript", "fake tool request {\"request\":\"...\"}", "stop", "primary", "citations", "help"];
 }
 
 async function start(tokens: string[], ctx: ExtensionCommandContext, service: Service): Promise<void> {
+	if (tokens.length === 0) return chat(tokens, ctx, service);
 	return startProvider(providerArg(tokens) ?? "fake", tokens, ctx, service);
 }
 
@@ -295,7 +296,8 @@ function helpText(): string {
 		"/realtime audio start|stop|status — play provider audio from the primary session",
 		"/realtime webrtc on|off — persistently toggle OpenAI WebRTC auto-launch",
 		"/realtime openai [start|stop] — toggle/start/stop OpenAI; start launches WebRTC when enabled",
-		"/realtime chat — start or reuse agent-mode browser voice chat in one command",
+		"/realtime (or /realtime start) — start or reuse agent-mode browser voice chat",
+		"/realtime status — show session history without starting voice",
 		"/realtime openai model [gpt-realtime-mini|gpt-realtime-2] — show or set the default OpenAI realtime model for future sessions",
 		"/realtime openai text <message> — send text to the active OpenAI session",
 		"/realtime openai mic start|stop|status — stream local microphone to the active OpenAI session",

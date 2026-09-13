@@ -8,7 +8,7 @@ This is a community fork of **[transcendr/pi-realtime](https://github.com/transc
 
 ## What this fork changes
 
-- **One-command voice chat:** `/realtime chat` starts agent mode and browser audio, or reuses the existing agent chat without reconnecting it.
+- **One-command voice chat:** `/realtime` starts agent mode and browser audio, or reuses the existing agent chat without reconnecting it.
 - **Automatic global settings:** reads the `pi-realtime.openai` section of Pi's `settings.json`.
 - **Separate realtime credentials in Pi's existing `auth.json`:** uses `pi-realtime:openai`, leaving `openai` and other coding credentials untouched.
 - **Configurable endpoint and authentication:** preserves OpenAI defaults; supports Azure `/openai/v1` endpoints and `api-key` auth for both HTTP and WebSocket connections.
@@ -157,10 +157,12 @@ Omit it to use mode defaults. `"off"` explicitly disables auxiliary transcriptio
 After configuring your credentials once, the normal startup is just:
 
 ```text
-/realtime chat
+/realtime
 ```
 
-It uses your configured model for a new session, selects **agent mode**, starts the browser helper, and prints its URL. Repeating it reuses the current agent chat instead of creating another session or interrupting connected audio. It can also attach the helper to an existing raw agent session. Other sessions are left running; stop them explicitly if you no longer need them. To change an existing chat's model, stop it, change the model setting, then run `/realtime chat` again.
+`/realtime start` does the same thing. `/realtime chat` remains a compatibility alias; you do not need it. Bare `/realtime` now starts voice rather than showing status—use `/realtime status` for a read-only overview.
+
+It uses your configured model for a new session, selects **agent mode**, starts the browser helper, and prints its URL. Repeating it reuses the current agent chat instead of creating another session or interrupting connected audio. It can also attach the helper to an existing raw agent session. Other sessions are left running; stop them explicitly if you no longer need them. To change an existing chat's model, stop it, change the model setting, then run `/realtime` again.
 
 The footer shows only `pi-realtime: idle` or the active-session count. Stopped sessions are kept as history, not running threads; view them with `/realtime status` instead of a persistent session-list widget.
 
@@ -181,7 +183,7 @@ Pi's coding model/provider is selected independently with Pi's normal model cont
 ### Useful commands
 
 ```text
-/realtime chat
+/realtime
 /realtime status
 /realtime openai model
 /realtime openai model gpt-realtime-2.1-mini
@@ -239,7 +241,7 @@ Protect **all routes**, not just the HTML page: `/config`, `/client-secret`, `/e
 In Pi:
 
 ```text
-/realtime chat
+/realtime
 ```
 
 Use the session URL shown by Pi, replacing only `http://127.0.0.1:8787` with your public HTTPS origin:

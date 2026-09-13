@@ -39,18 +39,30 @@ test("disabled/raw media and fake provider keep existing behavior", async () => 
   assert.equal(f.messages[1].level, "warning");
  }
  const f = fixture();
- await handleRealtimeCommand("start", f.ctx, f.service);
+ await handleRealtimeCommand("start --provider fake", f.ctx, f.service);
  assert.equal(f.calls[0].input.provider, "fake");
 });
 
-test("chat command is a single step and reports its URL", async () => {
+test("bare command, start and legacy chat alias all start/resume voice", async () => {
+ for (const command of ["", "  ", "start", "chat"]) {
+  const f = fixture();
+  f.service.startChat = async () => { f.calls.push({ action: "chat" }); return "http://127.0.0.1:8787/pi-realtime/openai/test"; };
+  await handleRealtimeCommand(command, f.ctx, f.service);
+  assert.deepEqual(f.calls, [{ action: "chat" }]);
+  assert.match(f.messages[0].text, /Voice chat ready.*http/);
+  await handleRealtimeCommand("chat --mode eco", f.ctx, f.service);
+  assert.equal(f.calls.length, 1); assert.match(f.messages[1].text, /Usage/);
+ }
+});
+
+test("explicit status and help never start voice", async () => {
  const f = fixture();
- f.service.startChat = async () => { f.calls.push({ action: "chat" }); return "http://127.0.0.1:8787/pi-realtime/openai/test"; };
- await handleRealtimeCommand("chat", f.ctx, f.service);
- assert.deepEqual(f.calls, [{ action: "chat" }]);
- assert.match(f.messages[0].text, /Voice chat ready.*http/);
- await handleRealtimeCommand("chat --mode eco", f.ctx, f.service);
- assert.equal(f.calls.length, 1); assert.match(f.messages[1].text, /Usage/);
+ f.service.statusText = () => "session history";
+ await handleRealtimeCommand("status", f.ctx, f.service);
+ await handleRealtimeCommand("help", f.ctx, f.service);
+ assert.equal(f.calls.length, 0);
+ assert.equal(f.messages[0].text, "session history");
+ assert.match(f.messages[1].text, /\/realtime \(or \/realtime start\)/);
 });
 
 function chatServiceFixture() {
