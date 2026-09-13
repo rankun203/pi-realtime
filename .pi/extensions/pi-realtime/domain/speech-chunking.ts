@@ -1,5 +1,12 @@
 import { resolveRealtimeBehaviorProfile } from "./behavior-profiles";
-import type { BackendUpdateSpeechChunkingPolicy, BackendUpdateSpeechEnvelope, BackendUpdateSpeechRenderingMode, RealtimeBehaviorProfileFragment, RealtimeContextPushInput, RealtimeInteractionModeId } from "../types";
+import type {
+	BackendUpdateSpeechChunkingPolicy,
+	BackendUpdateSpeechEnvelope,
+	BackendUpdateSpeechRenderingMode,
+	RealtimeBehaviorProfileFragment,
+	RealtimeContextPushInput,
+	RealtimeInteractionModeId,
+} from "../types";
 
 export type SpeechChunk = {
 	text: string;
@@ -18,7 +25,8 @@ export function chunkBackendUpdateSpeech(input: {
 }): SpeechChunk[] {
 	const text = input.text.trim();
 	const maxChars = Math.max(1, input.policy.maxChars);
-	if (!input.policy.enabled || text.length <= maxChars) return buildChunks([text], text.length, "verbatim", "speak_this_verbatim");
+	if (!input.policy.enabled || text.length <= maxChars)
+		return buildChunks([text], text.length, "verbatim", "speak_this_verbatim");
 	const units = speechUnitsFor(text, maxChars).flatMap((unit) => splitOverlongUnit(unit, maxChars));
 	return buildChunks(packUnits(units, maxChars), text.length, "verbatim", "speak_this_verbatim");
 }
@@ -29,22 +37,45 @@ export function chunkRealtimePushSpeech(input: {
 	providerProfile?: RealtimeBehaviorProfileFragment;
 	interactionMode: RealtimeInteractionModeId;
 }): SpeechChunk[] {
-	const profile = resolveRealtimeBehaviorProfile({ providerProfile: input.providerProfile, interactionMode: input.interactionMode });
+	const profile = resolveRealtimeBehaviorProfile({
+		providerProfile: input.providerProfile,
+		interactionMode: input.interactionMode,
+	});
 	const speech = profile.backendUpdateSpeech;
-	const renderingMode = renderingModeFor(input.text, speech.rendering.defaultMode, speech.rendering.longTextThresholdChars, speech.rendering.longTextMode);
+	const renderingMode = renderingModeFor(
+		input.text,
+		speech.rendering.defaultMode,
+		speech.rendering.longTextThresholdChars,
+		speech.rendering.longTextMode,
+	);
 	if (input.push.mode !== "request_spoken_response" || input.push.kind !== "text" || !speech.chunking.enabled) {
-		return [{ text: input.text, index: 1, count: 1, originalTextLength: input.text.length, renderingMode, envelope: speech.rendering.envelope }];
+		return [
+			{
+				text: input.text,
+				index: 1,
+				count: 1,
+				originalTextLength: input.text.length,
+				renderingMode,
+				envelope: speech.rendering.envelope,
+			},
+		];
 	}
-	return chunkBackendUpdateSpeech({ text: input.text, policy: speech.chunking }).map((chunk) => ({ ...chunk, renderingMode, envelope: speech.rendering.envelope }));
+	return chunkBackendUpdateSpeech({ text: input.text, policy: speech.chunking }).map((chunk) => ({
+		...chunk,
+		renderingMode,
+		envelope: speech.rendering.envelope,
+	}));
 }
 
 function speechUnitsFor(text: string, maxChars: number): string[] {
-	return splitByBlankLines(text).flatMap((block) => {
-		if (isStructuredSpeechBlock(block)) return splitByLines(block);
-		if (isListBlock(block)) return splitByLines(block);
-		if (block.length > maxChars && block.includes("\n")) return splitByLines(block);
-		return splitSentences(block);
-	}).filter((unit) => unit.length > 0);
+	return splitByBlankLines(text)
+		.flatMap((block) => {
+			if (isStructuredSpeechBlock(block)) return splitByLines(block);
+			if (isListBlock(block)) return splitByLines(block);
+			if (block.length > maxChars && block.includes("\n")) return splitByLines(block);
+			return splitSentences(block);
+		})
+		.filter((unit) => unit.length > 0);
 }
 
 function splitByBlankLines(text: string): string[] {
@@ -127,10 +158,12 @@ function consumeTrailingWhitespace(text: string, start: number): number {
 
 function isStructuredSpeechBlock(block: string): boolean {
 	const trimmed = block.trimStart();
-	return trimmed.startsWith("```")
-		|| trimmed.startsWith("{")
-		|| trimmed.startsWith("[")
-		|| /^\s*(at |Caused by:|Error:|\w+Error:)/m.test(block);
+	return (
+		trimmed.startsWith("```") ||
+		trimmed.startsWith("{") ||
+		trimmed.startsWith("[") ||
+		/^\s*(at |Caused by:|Error:|\w+Error:)/m.test(block)
+	);
 }
 
 function isListBlock(block: string): boolean {
@@ -186,7 +219,12 @@ function packUnits(units: readonly string[], maxChars: number): string[] {
 	return chunks;
 }
 
-function buildChunks(texts: readonly string[], originalTextLength: number, renderingMode: BackendUpdateSpeechRenderingMode, envelope: BackendUpdateSpeechEnvelope): SpeechChunk[] {
+function buildChunks(
+	texts: readonly string[],
+	originalTextLength: number,
+	renderingMode: BackendUpdateSpeechRenderingMode,
+	envelope: BackendUpdateSpeechEnvelope,
+): SpeechChunk[] {
 	const filtered = texts.filter((text) => text.length > 0);
 	return filtered.map((text, index) => ({
 		text,
@@ -198,7 +236,12 @@ function buildChunks(texts: readonly string[], originalTextLength: number, rende
 	}));
 }
 
-function renderingModeFor(text: string, defaultMode: BackendUpdateSpeechRenderingMode, threshold: number | undefined, longTextMode: BackendUpdateSpeechRenderingMode | undefined): BackendUpdateSpeechRenderingMode {
+function renderingModeFor(
+	text: string,
+	defaultMode: BackendUpdateSpeechRenderingMode,
+	threshold: number | undefined,
+	longTextMode: BackendUpdateSpeechRenderingMode | undefined,
+): BackendUpdateSpeechRenderingMode {
 	if (threshold === undefined || longTextMode === undefined) return defaultMode;
 	return text.length > threshold ? longTextMode : defaultMode;
 }

@@ -8,9 +8,22 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadRealtimeWebPort } from "../../env";
-import { createOutboxPollTraceState, describeRealtimePayload, nextOutboxPollTrace, type DebugTraceRecorder, type OutboxPollTraceState } from "../../debug-trace";
+import {
+	createOutboxPollTraceState,
+	describeRealtimePayload,
+	nextOutboxPollTrace,
+	type DebugTraceRecorder,
+	type OutboxPollTraceState,
+} from "../../debug-trace";
 import type { NormalizedProviderEvent, ProviderSessionId, ProviderKind } from "../../types";
-import type { WebRTCHelperInboundEvent, WebRTCHelperOutboundEvent, WebRTCHelperRegistrationConfig, WebRTCHelperServer, WebRTCHelperSessionConfig, WebRTCHelperSink } from "./protocol";
+import type {
+	WebRTCHelperInboundEvent,
+	WebRTCHelperOutboundEvent,
+	WebRTCHelperRegistrationConfig,
+	WebRTCHelperServer,
+	WebRTCHelperSessionConfig,
+	WebRTCHelperSink,
+} from "./protocol";
 
 export type { WebRTCHelperServer } from "./protocol";
 
@@ -44,7 +57,9 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	private server: Server | undefined;
 	private port: number | undefined;
 	private dashboard: DashboardBridge | undefined;
-	setDashboard(bridge: DashboardBridge): void { this.dashboard = bridge; }
+	setDashboard(bridge: DashboardBridge): void {
+		this.dashboard = bridge;
+	}
 	private readonly sessions = new Map<ProviderSessionId, HelperSession>();
 	private readonly discovery = createHelperDiscovery();
 
@@ -76,25 +91,58 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		this.companionOwner = undefined;
 		this.sessions.clear();
 		this.discovery.remove();
-		await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
+		await new Promise<void>((resolve, reject) => server.close((error) => (error ? reject(error) : resolve())));
 		this.server = undefined;
 		this.port = undefined;
 	}
 
 	registerSession(config: WebRTCHelperRegistrationConfig, sink: WebRTCHelperSink): void {
 		const { createClientSecret, normalizeUsageEvent, trace, ...sessionConfig } = config;
-		const session = { config: { ...sessionConfig, debugTracePath: trace?.path }, createClientSecret, normalizeUsageEvent, trace, sink, outbox: [], messages: [], seq: 0, lastSeenAt: Date.now(), deliveredOutboxId: 0, outboxPollTrace: createOutboxPollTraceState() };
+		const session = {
+			config: { ...sessionConfig, debugTracePath: trace?.path },
+			createClientSecret,
+			normalizeUsageEvent,
+			trace,
+			sink,
+			outbox: [],
+			messages: [],
+			seq: 0,
+			lastSeenAt: Date.now(),
+			deliveredOutboxId: 0,
+			outboxPollTrace: createOutboxPollTraceState(),
+		};
 		if (config.interaction?.mode === "agent" && this.dashboard?.pi) {
-			if (this.companion) throw new Error("This Pi session already has a voice companion. Reuse it or stop it before starting another.");
+			if (this.companion)
+				throw new Error("This Pi session already has a voice companion. Reuse it or stop it before starting another.");
 			this.companionOwner = config.providerSessionId;
 			this.companion = new VoiceCompanion({
-				bridge: this.dashboard.pi, model: config.model,
+				bridge: this.dashboard.pi,
+				model: config.model,
 				transport: this.options.voiceTransport ?? openAIVoiceTransport(),
-				stateDirectory: this.options.stateDirectory ?? join((process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent")).replace(/^~(?=\/|$)/, homedir()), "pi-realtime", "companions"),
-				onEvent: event => {
+				stateDirectory:
+					this.options.stateDirectory ??
+					join(
+						(process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent")).replace(/^~(?=\/|$)/, homedir()),
+						"pi-realtime",
+						"companions",
+					),
+				onEvent: (event) => {
 					if (event.type !== "response.done" || !normalizeUsageEvent) return;
-					const observation = normalizeUsageEvent({ source: "response", realtimeEvent: event, providerEventId: event.event_id, at: Date.now() });
-					if (observation) sink.onProviderEvent({ type: "usage", provider: "openai", providerSessionId: config.providerSessionId, localSeq: Date.now(), at: Date.now(), observation });
+					const observation = normalizeUsageEvent({
+						source: "response",
+						realtimeEvent: event,
+						providerEventId: event.event_id,
+						at: Date.now(),
+					});
+					if (observation)
+						sink.onProviderEvent({
+							type: "usage",
+							provider: "openai",
+							providerSessionId: config.providerSessionId,
+							localSeq: Date.now(),
+							at: Date.now(),
+							observation,
+						});
 				},
 			});
 		}
@@ -108,7 +156,8 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		if (!session) return;
 		if (this.companionOwner === providerSessionId) {
 			void this.companion?.close().catch(() => {});
-			this.companion = undefined; this.companionOwner = undefined;
+			this.companion = undefined;
+			this.companionOwner = undefined;
 		}
 		this.enqueueForSession(session, { type: "pi.helper.close", reason });
 		session.trace?.write({ source: "helper_server", direction: "lifecycle", action: "unregisterSession", reason });
@@ -118,8 +167,9 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		}, 5000).unref();
 	}
 
-
-	isCompanion(providerSessionId: ProviderSessionId): boolean { return this.companionOwner === providerSessionId && !!this.companion; }
+	isCompanion(providerSessionId: ProviderSessionId): boolean {
+		return this.companionOwner === providerSessionId && !!this.companion;
+	}
 	enqueue(providerSessionId: ProviderSessionId, event: Record<string, unknown>): void {
 		if (this.isCompanion(providerSessionId)) return;
 		this.enqueueForSession(this.requireSession(providerSessionId), event);
@@ -129,7 +179,12 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		const id = ++session.seq;
 		session.outbox.push({ id, event });
 		session.outbox = session.outbox.slice(-200);
-		session.trace?.write({ source: "helper_server", direction: "outbox_enqueue", outboxId: id, ...describeRealtimePayload(event) });
+		session.trace?.write({
+			source: "helper_server",
+			direction: "outbox_enqueue",
+			outboxId: id,
+			...describeRealtimePayload(event),
+		});
 	}
 
 	urlFor(providerSessionId: ProviderSessionId): string {
@@ -139,7 +194,10 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 
 	status(): string {
 		if (!this.server || !this.port) return "webrtc helper: stopped";
-		const rows = [...this.sessions.values()].map((session) => `- ${session.config.providerSessionId} ${session.config.model} lastSeen=${Date.now() - session.lastSeenAt}ms outbox=${session.outbox.length}`);
+		const rows = [...this.sessions.values()].map(
+			(session) =>
+				`- ${session.config.providerSessionId} ${session.config.model} lastSeen=${Date.now() - session.lastSeenAt}ms outbox=${session.outbox.length}`,
+		);
 		return [`webrtc helper: http://${HOST}:${this.port}`, ...rows].join("\n");
 	}
 
@@ -148,7 +206,15 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 			const url = new URL(req.url ?? "/", `http://${HOST}`);
 			if (req.method === "GET" && url.pathname === "/pi-realtime/discovery") {
 				if (!sameOriginRequest(req)) return this.respond(res, 403, { error: "cross_origin_request_denied" });
-				return this.respond(res, 200, { id: this.discovery.id, project: this.dashboard?.snapshot().project ?? process.cwd(), sessions: [...this.sessions.values()].map(session => ({ id: session.config.providerSessionId, model: session.config.model, mode: session.config.interaction?.mode ?? "agent" })) });
+				return this.respond(res, 200, {
+					id: this.discovery.id,
+					project: this.dashboard?.snapshot().project ?? process.cwd(),
+					sessions: [...this.sessions.values()].map((session) => ({
+						id: session.config.providerSessionId,
+						model: session.config.model,
+						mode: session.config.interaction?.mode ?? "agent",
+					})),
+				});
 			}
 			if (this.tryServeStatic(req, res, url)) return;
 			const route = this.sessionRoute(url);
@@ -156,7 +222,9 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 			if (!sameOriginRequest(req)) return this.respond(res, 403, { error: "cross_origin_request_denied" });
 			await this.handleSessionRoute(req, res, url, route);
 		} catch (error) {
-			this.respond(res, (error as { statusCode?: number }).statusCode ?? 500, { error: error instanceof Error ? error.message : String(error) });
+			this.respond(res, (error as { statusCode?: number }).statusCode ?? 500, {
+				error: error instanceof Error ? error.message : String(error),
+			});
 		}
 	}
 
@@ -173,40 +241,68 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	}
 
 	private sessionRoute(url: URL): { providerSessionId: ProviderSessionId; action: string } | undefined {
-		const match = /^\/pi-realtime\/openai\/([^/]+)\/(config|client-secret|event|outbox|messages|message|voice-connect|voice-heartbeat|voice-disconnect)$/.exec(url.pathname);
+		const match =
+			/^\/pi-realtime\/openai\/([^/]+)\/(config|client-secret|event|outbox|messages|message|voice-connect|voice-heartbeat|voice-disconnect)$/.exec(
+				url.pathname,
+			);
 		return match ? { providerSessionId: decodeURIComponent(match[1] ?? ""), action: match[2] ?? "" } : undefined;
 	}
 
-	private async handleSessionRoute(req: IncomingMessage, res: ServerResponse, url: URL, route: { providerSessionId: ProviderSessionId; action: string }): Promise<void> {
+	private async handleSessionRoute(
+		req: IncomingMessage,
+		res: ServerResponse,
+		url: URL,
+		route: { providerSessionId: ProviderSessionId; action: string },
+	): Promise<void> {
 		const session = this.requireSession(route.providerSessionId);
 		session.lastSeenAt = Date.now();
 		const companion = this.companionOwner === route.providerSessionId ? this.companion : undefined;
 		if (companion && req.method === "POST" && route.action.startsWith("voice-")) {
 			const body = await readJson<{ sdp?: unknown; takeover?: boolean; lease?: string }>(req);
 			if (route.action === "voice-connect") {
-				if (typeof body.sdp !== "string" || !body.sdp.startsWith("v=0") || body.sdp.length > 100000) return this.respond(res, 400, { error: "invalid_sdp" });
+				if (typeof body.sdp !== "string" || !body.sdp.startsWith("v=0") || body.sdp.length > 100000)
+					return this.respond(res, 400, { error: "invalid_sdp" });
 				const result = await companion.connect(body.sdp, body.takeover === true);
-				if (res.destroyed) { await companion.release(result.lease); return; }
+				if (res.destroyed) {
+					await companion.release(result.lease);
+					return;
+				}
 				return this.respond(res, 200, result);
 			}
 			if (typeof body.lease !== "string") return this.respond(res, 400, { error: "lease_required" });
-			if (route.action === "voice-disconnect") { await companion.release(body.lease); return this.respond(res, 200, { ok: true }); }
+			if (route.action === "voice-disconnect") {
+				await companion.release(body.lease);
+				return this.respond(res, 200, { ok: true });
+			}
 			return this.respond(res, 200, companion.heartbeat(body.lease));
 		}
-		if (companion && ["client-secret", "event", "outbox"].includes(route.action)) return this.respond(res, 409, { error: "Voice companion is controlled server-side" });
+		if (companion && ["client-secret", "event", "outbox"].includes(route.action))
+			return this.respond(res, 409, { error: "Voice companion is controlled server-side" });
 		if (req.method === "GET" && route.action === "messages") {
 			const snapshot = this.dashboard?.snapshot() ?? { messages: [], project: "Pi", usage: "cost pending" };
-			return this.respond(res, 200, { ...snapshot, messages: [...snapshot.messages, ...(companion?.messages() ?? session.messages)].sort((a, b) => a.at - b.at).slice(-150) });
+			return this.respond(res, 200, {
+				...snapshot,
+				messages: [...snapshot.messages, ...(companion?.messages() ?? session.messages)]
+					.sort((a, b) => a.at - b.at)
+					.slice(-150),
+			});
 		}
 		if (req.method === "POST" && route.action === "message") {
 			if (!this.dashboard) return this.respond(res, 503, { error: "chat_unavailable" });
 			const body = await readJson<{ text?: unknown }>(req);
-			if (typeof body.text !== "string" || !body.text.trim() || body.text.length > 20000) return this.respond(res, 400, { error: "text_required_max_20000" });
+			if (typeof body.text !== "string" || !body.text.trim() || body.text.length > 20000)
+				return this.respond(res, 400, { error: "text_required_max_20000" });
 			await this.dashboard.sendMessage(body.text.trim());
 			return this.respond(res, 202, { ok: true });
 		}
-		if (req.method === "GET" && route.action === "config") return this.respond(res, 200, { ...session.config, companion: !!companion, resumeOutboxAfter: session.deliveredOutboxId });
-		if (req.method === "POST" && route.action === "client-secret") return this.respond(res, 200, await session.createClientSecret());
+		if (req.method === "GET" && route.action === "config")
+			return this.respond(res, 200, {
+				...session.config,
+				companion: !!companion,
+				resumeOutboxAfter: session.deliveredOutboxId,
+			});
+		if (req.method === "POST" && route.action === "client-secret")
+			return this.respond(res, 200, await session.createClientSecret());
 		if (req.method === "POST" && route.action === "event") return this.handleInboundEvent(req, res, session);
 		if (req.method === "GET" && route.action === "outbox") return this.respondOutbox(res, url, session);
 		return this.respond(res, 405, { error: "method_not_allowed" });
@@ -220,18 +316,45 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		}
 		if (inbound.type === "outbox_ack") {
 			session.deliveredOutboxId = Math.max(session.deliveredOutboxId, inbound.outboxId);
-			session.trace?.write({ source: "helper_server", direction: "outbox_ack", outboxId: inbound.outboxId, deliveredOutboxId: session.deliveredOutboxId });
+			session.trace?.write({
+				source: "helper_server",
+				direction: "outbox_ack",
+				outboxId: inbound.outboxId,
+				deliveredOutboxId: session.deliveredOutboxId,
+			});
 			return this.respond(res, 200, { ok: true });
 		}
-		session.trace?.write({ source: "helper_server", direction: "inbound_normalize", inboundType: inbound.type, providerEventId: inbound.providerEventId });
+		session.trace?.write({
+			source: "helper_server",
+			direction: "inbound_normalize",
+			inboundType: inbound.type,
+			providerEventId: inbound.providerEventId,
+		});
 		const event = this.normalize(session, inbound);
 		if (event) {
-			if ((event.type === "assistant_transcript" || event.type === "user_transcript") && event.final && event.text.trim()) {
+			if (
+				(event.type === "assistant_transcript" || event.type === "user_transcript") &&
+				event.final &&
+				event.text.trim()
+			) {
 				const id = `voice-${event.providerEventId ?? Date.now()}`;
-				if (!session.messages.some(message => message.id === id)) session.messages.push({ id, role: event.type === "user_transcript" ? "user" : "assistant", text: event.text.slice(0, 20000), at: event.at, source: "Voice" });
+				if (!session.messages.some((message) => message.id === id))
+					session.messages.push({
+						id,
+						role: event.type === "user_transcript" ? "user" : "assistant",
+						text: event.text.slice(0, 20000),
+						at: event.at,
+						source: "Voice",
+					});
 				session.messages = session.messages.slice(-100);
 			}
-			session.trace?.write({ source: "helper_server", direction: "normalized_event", eventType: event.type, providerEventId: event.providerEventId, localSeq: event.localSeq });
+			session.trace?.write({
+				source: "helper_server",
+				direction: "normalized_event",
+				eventType: event.type,
+				providerEventId: event.providerEventId,
+				localSeq: event.localSeq,
+			});
 			session.sink.onProviderEvent(event);
 		}
 		this.respond(res, 200, { ok: true });
@@ -253,11 +376,27 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	private normalize(session: HelperSession, inbound: WebRTCHelperInboundEvent): NormalizedProviderEvent | undefined {
 		const providerSessionId = session.config.providerSessionId;
 		const provider = session.config.provider;
-		const base = { provider, providerSessionId, providerEventId: inbound.providerEventId, localSeq: Date.now(), at: Date.now() };
-		if (inbound.type === "tool_call") return { ...base, type: "tool_call", call: { ...inbound.call, provider, providerSessionId, status: "pending", createdAt: Date.now() } };
+		const base = {
+			provider,
+			providerSessionId,
+			providerEventId: inbound.providerEventId,
+			localSeq: Date.now(),
+			at: Date.now(),
+		};
+		if (inbound.type === "tool_call")
+			return {
+				...base,
+				type: "tool_call",
+				call: { ...inbound.call, provider, providerSessionId, status: "pending", createdAt: Date.now() },
+			};
 		if (inbound.type === "usage") {
 			if (!session.normalizeUsageEvent) return undefined;
-			const observation = session.normalizeUsageEvent({ source: inbound.source, realtimeEvent: inbound.realtimeEvent, providerEventId: inbound.providerEventId, at: base.at });
+			const observation = session.normalizeUsageEvent({
+				source: inbound.source,
+				realtimeEvent: inbound.realtimeEvent,
+				providerEventId: inbound.providerEventId,
+				at: base.at,
+			});
 			return observation ? { ...base, type: "usage", observation } : undefined;
 		}
 		return { ...base, ...inbound } as NormalizedProviderEvent;

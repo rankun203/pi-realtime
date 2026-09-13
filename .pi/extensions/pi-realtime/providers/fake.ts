@@ -1,6 +1,22 @@
 import { randomUUID } from "node:crypto";
-import type { ContextPacket, DisconnectReason, NormalizedProviderEvent, ProviderDeliveryReceipt, ProviderKind, ProviderSessionId, VoiceToolName, VoiceToolResultRecord, VoiceToolSurface } from "../types";
-import type { ProviderConnectConfig, ProviderEventSink, RealtimeContextPushRequest, RealtimeProviderAdapter, VoiceResponseRequest } from "./types";
+import type {
+	ContextPacket,
+	DisconnectReason,
+	NormalizedProviderEvent,
+	ProviderDeliveryReceipt,
+	ProviderKind,
+	ProviderSessionId,
+	VoiceToolName,
+	VoiceToolResultRecord,
+	VoiceToolSurface,
+} from "../types";
+import type {
+	ProviderConnectConfig,
+	ProviderEventSink,
+	RealtimeContextPushRequest,
+	RealtimeProviderAdapter,
+	VoiceResponseRequest,
+} from "./types";
 
 export class FakeRealtimeProviderAdapter implements RealtimeProviderAdapter {
 	readonly provider: ProviderKind = "fake";
@@ -50,8 +66,15 @@ export class FakeRealtimeProviderAdapter implements RealtimeProviderAdapter {
 
 	async pushContext(input: RealtimeContextPushRequest): Promise<ProviderDeliveryReceipt> {
 		this.pushedContexts.push(input);
-		if (input.mode === "request_spoken_response") this.emit({ type: "assistant_transcript", text: input.text, final: true });
-		return { status: "delivered", message: input.mode === "request_spoken_response" ? "fake provider stored context and emitted acknowledgement" : "fake provider stored context without response" };
+		if (input.mode === "request_spoken_response")
+			this.emit({ type: "assistant_transcript", text: input.text, final: true });
+		return {
+			status: "delivered",
+			message:
+				input.mode === "request_spoken_response"
+					? "fake provider stored context and emitted acknowledgement"
+					: "fake provider stored context without response",
+		};
 	}
 
 	async sendAudioInput(_audio: Buffer): Promise<ProviderDeliveryReceipt> {
@@ -74,13 +97,28 @@ export class FakeRealtimeProviderAdapter implements RealtimeProviderAdapter {
 		const voiceToolCallId = `fake_call_${randomUUID()}`;
 		this.emit({
 			type: "tool_call",
-			call: { voiceToolCallId, provider: "fake", providerSessionId: this.providerSessionId, providerToolCallId: voiceToolCallId, name, arguments: args, status: "pending", createdAt: Date.now() },
+			call: {
+				voiceToolCallId,
+				provider: "fake",
+				providerSessionId: this.providerSessionId,
+				providerToolCallId: voiceToolCallId,
+				name,
+				arguments: args,
+				status: "pending",
+				createdAt: Date.now(),
+			},
 		});
 		return voiceToolCallId;
 	}
 
 	private emit(event: Record<string, unknown> & { type: NormalizedProviderEvent["type"] }): void {
-		this.sink?.onProviderEvent({ ...event, provider: "fake", providerSessionId: this.providerSessionId, localSeq: ++this.seq, at: Date.now() } as NormalizedProviderEvent);
+		this.sink?.onProviderEvent({
+			...event,
+			provider: "fake",
+			providerSessionId: this.providerSessionId,
+			localSeq: ++this.seq,
+			at: Date.now(),
+		} as NormalizedProviderEvent);
 	}
 }
 
@@ -91,8 +129,14 @@ export function createFakeRealtimeProvider(providerSessionId: ProviderSessionId)
 export function createFakeProviderRuntime() {
 	return {
 		provider: "fake" as const,
-		defaultModel() { return "fake-realtime"; },
-		assertCredentials() { return; },
-		createAdapter(input: { providerSessionId: ProviderSessionId }) { return createFakeRealtimeProvider(input.providerSessionId); },
+		defaultModel() {
+			return "fake-realtime";
+		},
+		assertCredentials() {
+			return;
+		},
+		createAdapter(input: { providerSessionId: ProviderSessionId }) {
+			return createFakeRealtimeProvider(input.providerSessionId);
+		},
 	};
 }

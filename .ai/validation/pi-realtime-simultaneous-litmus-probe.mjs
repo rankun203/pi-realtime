@@ -13,23 +13,27 @@ assert.match(service, /fakeAdapters = new Map<ProviderSessionId/);
 assert.match(packets, /nextContextRevision/);
 
 const state = {
-  sessions: new Map(),
-  pendingToolCalls: new Map(),
-  contextRevisions: new Map(),
+	sessions: new Map(),
+	pendingToolCalls: new Map(),
+	contextRevisions: new Map(),
 };
-function start(id, provider) { state.sessions.set(id, { providerSessionId: id, provider, status: "active" }); }
-function call(id, session) { state.pendingToolCalls.set(id, { voiceToolCallId: id, providerSessionId: session }); }
+function start(id, provider) {
+	state.sessions.set(id, { providerSessionId: id, provider, status: "active" });
+}
+function call(id, session) {
+	state.pendingToolCalls.set(id, { voiceToolCallId: id, providerSessionId: session });
+}
 function result(id, session) {
-  const pending = state.pendingToolCalls.get(id);
-  if (!pending) return "missing";
-  if (pending.providerSessionId !== session) return "wrong-session";
-  state.pendingToolCalls.delete(id);
-  return "sent";
+	const pending = state.pendingToolCalls.get(id);
+	if (!pending) return "missing";
+	if (pending.providerSessionId !== session) return "wrong-session";
+	state.pendingToolCalls.delete(id);
+	return "sent";
 }
 function nextRev(session, channel) {
-  const current = state.contextRevisions.get(session)?.[channel] ?? 0;
-  state.contextRevisions.set(session, { ...(state.contextRevisions.get(session) ?? {}), [channel]: current + 1 });
-  return current + 1;
+	const current = state.contextRevisions.get(session)?.[channel] ?? 0;
+	state.contextRevisions.set(session, { ...(state.contextRevisions.get(session) ?? {}), [channel]: current + 1 });
+	return current + 1;
 }
 
 start("openai_1", "openai");

@@ -3,17 +3,35 @@ import { renderRealtimeUpdateEnvelope, realtimeUpdateResponseInstructions } from
 import type { ProviderInteractionConfig } from "../../types";
 import type { RealtimeContextPushRequest, VoiceResponseRequest } from "../types";
 
-export function responseCreateEvent(request: VoiceResponseRequest, outputModalities: Array<"audio" | "text">): RealtimeClientEvent {
-	return { type: "response.create", response: { output_modalities: outputModalities, instructions: request.instructions } } as RealtimeClientEvent;
+export function responseCreateEvent(
+	request: VoiceResponseRequest,
+	outputModalities: Array<"audio" | "text">,
+): RealtimeClientEvent {
+	return {
+		type: "response.create",
+		response: { output_modalities: outputModalities, instructions: request.instructions },
+	} as RealtimeClientEvent;
 }
 
 export function backendUpdateItemEvent(input: RealtimeContextPushRequest): RealtimeClientEvent {
-	return { type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: renderRealtimeUpdateEnvelope(input) }] } } as RealtimeClientEvent;
+	return {
+		type: "conversation.item.create",
+		item: {
+			type: "message",
+			role: "system",
+			content: [{ type: "input_text", text: renderRealtimeUpdateEnvelope(input) }],
+		},
+	} as RealtimeClientEvent;
 }
 
-export function backendUpdateResponseEvent(input: RealtimeContextPushRequest, interaction: ProviderInteractionConfig, outputModalities: Array<"audio" | "text">): RealtimeClientEvent {
+export function backendUpdateResponseEvent(
+	input: RealtimeContextPushRequest,
+	interaction: ProviderInteractionConfig,
+	outputModalities: Array<"audio" | "text">,
+): RealtimeClientEvent {
 	const shape = backendUpdateResponseShape(input, interaction);
-	if (!shape.isolated) return responseCreateEvent({ reason: "pi_context_push", instructions: shape.instructions }, outputModalities);
+	if (!shape.isolated)
+		return responseCreateEvent({ reason: "pi_context_push", instructions: shape.instructions }, outputModalities);
 	return {
 		type: "response.create",
 		response: {
@@ -27,7 +45,10 @@ export function backendUpdateResponseEvent(input: RealtimeContextPushRequest, in
 	} as RealtimeClientEvent;
 }
 
-export function backendUpdateResponseShape(input: RealtimeContextPushRequest, interaction: ProviderInteractionConfig): BackendUpdateResponseShape {
+export function backendUpdateResponseShape(
+	input: RealtimeContextPushRequest,
+	interaction: ProviderInteractionConfig,
+): BackendUpdateResponseShape {
 	// Queued chunks may already coexist in conversation history. Each speech
 	// response must see only its own chunk, not every pending read-verbatim task.
 	// Agent-mode history items are still retained for subsequent user turns.

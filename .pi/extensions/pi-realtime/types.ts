@@ -160,8 +160,17 @@ export type NormalizedProviderEvent =
 	| (ProviderEventBase & { type: "assistant_transcript"; text: string; final: boolean })
 	| (ProviderEventBase & { type: "tool_call"; call: VoiceToolCallRecord })
 	| (ProviderEventBase & { type: "usage"; observation: UsageObservation })
-	| (ProviderEventBase & { type: "turn_signal"; signal: "speech_started" | "speech_stopped" | "waiting_for_input" | "interrupted" | "turn_complete" })
-	| (ProviderEventBase & { type: "context_delivery"; packetId: ContextPacketId; revision: number; status: "delivered" | "skipped" | "failed"; message?: string });
+	| (ProviderEventBase & {
+			type: "turn_signal";
+			signal: "speech_started" | "speech_stopped" | "waiting_for_input" | "interrupted" | "turn_complete";
+	  })
+	| (ProviderEventBase & {
+			type: "context_delivery";
+			packetId: ContextPacketId;
+			revision: number;
+			status: "delivered" | "skipped" | "failed";
+			message?: string;
+	  });
 
 export type ContextPacketChannel = "session" | "pi_state" | "citations" | "tool_surface" | "instruction_result";
 export type ContextPacketPriority = "critical" | "normal" | "background";
@@ -173,7 +182,11 @@ export type ContextPacketSection = {
 	tokensEstimate?: number;
 };
 
-export type ContextRef = { kind: "citation" | "instruction" | "provider_session" | "session_entry"; id: string; label?: string };
+export type ContextRef = {
+	kind: "citation" | "instruction" | "provider_session" | "session_entry";
+	id: string;
+	label?: string;
+};
 
 export type ContextPacket = {
 	packetId: ContextPacketId;
@@ -189,7 +202,10 @@ export type ContextPacket = {
 	staleAfterRevision?: number;
 };
 
-export type ContextPacketSummary = Pick<ContextPacket, "packetId" | "revision" | "channel" | "priority" | "summary" | "createdAt">;
+export type ContextPacketSummary = Pick<
+	ContextPacket,
+	"packetId" | "revision" | "channel" | "priority" | "summary" | "createdAt"
+>;
 
 export type CitationPacketItem = {
 	displayRef: string;
@@ -210,7 +226,14 @@ export type CitationDeck = {
 
 export type CitationDeckSummary = { revision: number; count: number; citationIds: CitationId[]; observedAt: number };
 
-export type VoiceToolName = "request" | "pi_state_snapshot" | "pi_send_instruction" | "pi_wait_for_update" | "pi_realtime_status" | "pinotator_citations_list" | "pinotator_citation_resolve";
+export type VoiceToolName =
+	| "request"
+	| "pi_state_snapshot"
+	| "pi_send_instruction"
+	| "pi_wait_for_update"
+	| "pi_realtime_status"
+	| "pinotator_citations_list"
+	| "pinotator_citation_resolve";
 
 export type VoiceToolDefinition = {
 	name: VoiceToolName;
@@ -266,32 +289,111 @@ export type VoiceInstructionReceipt = {
 	message?: string;
 };
 
-export type VoiceInstructionRecord = VoiceInstructionInput & { submittedAt: number; delivery: VoiceInstructionReceipt["delivery"] };
+export type VoiceInstructionRecord = VoiceInstructionInput & {
+	submittedAt: number;
+	delivery: VoiceInstructionReceipt["delivery"];
+};
 
 export type ProviderDeliveryReceipt = { status: "delivered" | "skipped" | "failed"; message?: string };
 export type RealtimePushMode = "context_only" | "request_spoken_response";
 export type RealtimePushSource = "pi_model_tool" | "automatic_agent_output" | "manual";
 export type RealtimeUpdateKind = "ack" | "status" | "text";
-export type RealtimeContextPushInput = { providerSessionId?: ProviderSessionId; text: string; mode: RealtimePushMode; source: RealtimePushSource; kind: RealtimeUpdateKind; summary?: string };
+export type RealtimeContextPushInput = {
+	providerSessionId?: ProviderSessionId;
+	text: string;
+	mode: RealtimePushMode;
+	source: RealtimePushSource;
+	kind: RealtimeUpdateKind;
+	summary?: string;
+};
 export type DisconnectReason = "user" | "shutdown" | "reload" | "tree" | "compact" | "error";
 
 export type RealtimeEvent =
 	| { version: typeof EVENT_VERSION; kind: "session_started"; eventId: string; at: number; session: VoiceSessionRecord }
-	| { version: typeof EVENT_VERSION; kind: "session_stopped"; eventId: string; at: number; providerSessionId: ProviderSessionId; reason: string }
-	| { version: typeof EVENT_VERSION; kind: "session_primary_changed"; eventId: string; at: number; providerSessionId: ProviderSessionId | null }
-	| { version: typeof EVENT_VERSION; kind: "provider_event"; eventId: string; at: number; providerEvent: NormalizedProviderEvent }
-	| { version: typeof EVENT_VERSION; kind: "context_packet_sent"; eventId: string; at: number; providerSessionId: ProviderSessionId; packet: ContextPacketSummary; receipt: ProviderDeliveryReceipt }
-	| { version: typeof EVENT_VERSION; kind: "voice_tool_call_received"; eventId: string; at: number; call: VoiceToolCallRecord }
-	| { version: typeof EVENT_VERSION; kind: "voice_tool_result_sent"; eventId: string; at: number; result: VoiceToolResultRecord }
-	| { version: typeof EVENT_VERSION; kind: "voice_instruction_submitted"; eventId: string; at: number; instruction: VoiceInstructionRecord; receipt: VoiceInstructionReceipt }
-	| { version: typeof EVENT_VERSION; kind: "usage_observed"; eventId: string; at: number; observation: UsageObservation }
-	| { version: typeof EVENT_VERSION; kind: "usage_reset"; eventId: string; at: number; providerSessionId?: ProviderSessionId }
-	| { version: typeof EVENT_VERSION; kind: "citation_deck_observed"; eventId: string; at: number; deck: CitationDeckSummary }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "session_stopped";
+			eventId: string;
+			at: number;
+			providerSessionId: ProviderSessionId;
+			reason: string;
+	  }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "session_primary_changed";
+			eventId: string;
+			at: number;
+			providerSessionId: ProviderSessionId | null;
+	  }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "provider_event";
+			eventId: string;
+			at: number;
+			providerEvent: NormalizedProviderEvent;
+	  }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "context_packet_sent";
+			eventId: string;
+			at: number;
+			providerSessionId: ProviderSessionId;
+			packet: ContextPacketSummary;
+			receipt: ProviderDeliveryReceipt;
+	  }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "voice_tool_call_received";
+			eventId: string;
+			at: number;
+			call: VoiceToolCallRecord;
+	  }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "voice_tool_result_sent";
+			eventId: string;
+			at: number;
+			result: VoiceToolResultRecord;
+	  }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "voice_instruction_submitted";
+			eventId: string;
+			at: number;
+			instruction: VoiceInstructionRecord;
+			receipt: VoiceInstructionReceipt;
+	  }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "usage_observed";
+			eventId: string;
+			at: number;
+			observation: UsageObservation;
+	  }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "usage_reset";
+			eventId: string;
+			at: number;
+			providerSessionId?: ProviderSessionId;
+	  }
+	| {
+			version: typeof EVENT_VERSION;
+			kind: "citation_deck_observed";
+			eventId: string;
+			at: number;
+			deck: CitationDeckSummary;
+	  }
 	| { version: typeof EVENT_VERSION; kind: "config_changed"; eventId: string; at: number; patch: RealtimeConfigPatch };
 
 export type ProviderContextRevisionState = Partial<Record<ContextPacketChannel, number>>;
 
-export type RealtimeHistorySummary = { kind: RealtimeEvent["kind"]; eventId: string; at: number; providerSessionId?: ProviderSessionId };
+export type RealtimeHistorySummary = {
+	kind: RealtimeEvent["kind"];
+	eventId: string;
+	at: number;
+	providerSessionId?: ProviderSessionId;
+};
 
 export type RealtimeState = {
 	config: RealtimeConfig;

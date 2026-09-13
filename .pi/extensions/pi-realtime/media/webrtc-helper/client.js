@@ -26,8 +26,14 @@ function outboxCursorStorageKey() {
 
 startButton.addEventListener("click", async () => {
 	startButton.disabled = true;
-	try { await start(); } catch (error) { cleanupCurrentConnection(); reportError(error); }
-	finally { startButton.disabled = Boolean(currentPc); }
+	try {
+		await start();
+	} catch (error) {
+		cleanupCurrentConnection();
+		reportError(error);
+	} finally {
+		startButton.disabled = Boolean(currentPc);
+	}
 });
 document.getElementById("hangup").addEventListener("click", () => {
 	cleanupCurrentConnection();
@@ -36,7 +42,8 @@ document.getElementById("hangup").addEventListener("click", () => {
 });
 window.addEventListener("pagehide", cleanupCurrentConnection);
 window.addEventListener("message", (event) => {
-	if (event.origin === location.origin && event.source === window.parent && event.data?.type === "pi-agents-disconnect") cleanupCurrentConnection();
+	if (event.origin === location.origin && event.source === window.parent && event.data?.type === "pi-agents-disconnect")
+		cleanupCurrentConnection();
 });
 document.getElementById("composer").addEventListener("submit", sendChatMessage);
 pollMessages().catch(showChatError);
@@ -63,11 +70,23 @@ async function start() {
 		if (epoch !== connectionEpoch) return;
 		remoteAudio.hidden = false;
 		remoteAudio.srcObject = event.streams[0];
-		remoteAudio.play().catch(() => log("Speaker autoplay was blocked. Tap Play in the audio controls to enable sound."));
+		remoteAudio
+			.play()
+			.catch(() => log("Speaker autoplay was blocked. Tap Play in the audio controls to enable sound."));
 	};
 	pc.onconnectionstatechange = () => log(`peer: ${pc.connectionState}`);
-	const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: { ideal: true }, noiseSuppression: { ideal: true }, autoGainControl: { ideal: true }, channelCount: { ideal: 1 } } });
-	if (epoch !== connectionEpoch) { for (const track of stream.getTracks()) track.stop(); return; }
+	const stream = await navigator.mediaDevices.getUserMedia({
+		audio: {
+			echoCancellation: { ideal: true },
+			noiseSuppression: { ideal: true },
+			autoGainControl: { ideal: true },
+			channelCount: { ideal: 1 },
+		},
+	});
+	if (epoch !== connectionEpoch) {
+		for (const track of stream.getTracks()) track.stop();
+		return;
+	}
 	currentStream = stream;
 	for (const track of stream.getAudioTracks()) {
 		logAudioSettings(track);
@@ -88,10 +107,17 @@ async function start() {
 		trace("openai_inbound_raw", { bytes: event.data.length });
 		handleRealtimeEvent(JSON.parse(event.data));
 	});
-	dc.addEventListener("close", () => { if (epoch === connectionEpoch) postEvent({ type: "disconnected", reason: "data channel closed" }).catch(reportError); });
+	dc.addEventListener("close", () => {
+		if (epoch === connectionEpoch)
+			postEvent({ type: "disconnected", reason: "data channel closed" }).catch(reportError);
+	});
 	const offer = await pc.createOffer();
 	await pc.setLocalDescription(offer);
-	const answerSdp = await fetch(secret.callsUrl, { method: "POST", body: offer.sdp, headers: { authorization: `Bearer ${secret.value}`, "content-type": "application/sdp" } }).then(async (response) => {
+	const answerSdp = await fetch(secret.callsUrl, {
+		method: "POST",
+		body: offer.sdp,
+		headers: { authorization: `Bearer ${secret.value}`, "content-type": "application/sdp" },
+	}).then(async (response) => {
 		if (!response.ok) throw new Error(`OpenAI WebRTC calls offer failed: ${response.status} ${await response.text()}`);
 		return response.text();
 	});
@@ -124,33 +150,51 @@ function releaseVoiceLease(lease) {
 	const body = JSON.stringify({ lease });
 	const url = `${sessionBase}/voice-disconnect`;
 	if (navigator.sendBeacon?.(url, new Blob([body], { type: "application/json" }))) return;
-	fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true }).catch(() => {});
+	fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true }).catch(
+		() => {},
+	);
 }
 
 async function startCompanion(config, epoch) {
 	const pc = new RTCPeerConnection();
 	currentPc = pc;
 	document.getElementById("hangup").disabled = false;
-	pc.ontrack = event => {
+	pc.ontrack = (event) => {
 		if (epoch !== connectionEpoch) return;
-		remoteAudio.hidden = false; remoteAudio.srcObject = event.streams[0];
+		remoteAudio.hidden = false;
+		remoteAudio.srcObject = event.streams[0];
 		remoteAudio.play().catch(() => log("Tap Play to enable speaker audio."));
 	};
-	const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
-	if (epoch !== connectionEpoch) { for (const track of stream.getTracks()) track.stop(); return; }
+	const stream = await navigator.mediaDevices.getUserMedia({
+		audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+	});
+	if (epoch !== connectionEpoch) {
+		for (const track of stream.getTracks()) track.stop();
+		return;
+	}
 	currentStream = stream;
 	for (const track of stream.getAudioTracks()) pc.addTrack(track, stream);
 	dc = pc.createDataChannel("oai-events"); // Audio-session negotiation only; the server owns model events/tools.
-	const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
-	const negotiate = takeover => json(`${sessionBase}/voice-connect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sdp: offer.sdp, takeover }) });
+	const offer = await pc.createOffer();
+	await pc.setLocalDescription(offer);
+	const negotiate = (takeover) =>
+		json(`${sessionBase}/voice-connect`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ sdp: offer.sdp, takeover }),
+		});
 	let result;
-	try { result = await negotiate(false); }
-	catch (error) {
+	try {
+		result = await negotiate(false);
+	} catch (error) {
 		if (epoch !== connectionEpoch) return;
 		if (error.status !== 409 || !confirm("Another device is using this voice conversation. Take over?")) throw error;
 		result = await negotiate(true);
 	}
-	if (epoch !== connectionEpoch) { releaseVoiceLease(result.lease); return; }
+	if (epoch !== connectionEpoch) {
+		releaseVoiceLease(result.lease);
+		return;
+	}
 	voiceLease = result.lease;
 	await pc.setRemoteDescription({ type: "answer", sdp: result.answer });
 	if (epoch !== connectionEpoch) return;
@@ -161,18 +205,32 @@ async function startCompanion(config, epoch) {
 		if (voiceHeartbeatInFlight || epoch !== connectionEpoch) return;
 		voiceHeartbeatInFlight = true;
 		try {
-			const state = await json(`${sessionBase}/voice-heartbeat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lease: result.lease }) });
+			const state = await json(`${sessionBase}/voice-heartbeat`, {
+				method: "POST",
+				headers: { "content-type": "application/json" },
+				body: JSON.stringify({ lease: result.lease }),
+			});
 			if (epoch !== connectionEpoch) return;
 			if (state.restart) {
 				document.getElementById("notice").textContent = "Refreshing the voice connection. Your Pi work continues.";
-				await json(`${sessionBase}/voice-disconnect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lease: result.lease }) });
+				await json(`${sessionBase}/voice-disconnect`, {
+					method: "POST",
+					headers: { "content-type": "application/json" },
+					body: JSON.stringify({ lease: result.lease }),
+				});
 				if (epoch !== connectionEpoch) return;
 				voiceLease = undefined;
 				await start();
 			}
 		} catch (error) {
-			if (epoch === connectionEpoch) { cleanupCurrentConnection(); setStatus("Voice disconnected · reconnect when ready", "warn"); log(error.message); }
-		} finally { voiceHeartbeatInFlight = false; }
+			if (epoch === connectionEpoch) {
+				cleanupCurrentConnection();
+				setStatus("Voice disconnected · reconnect when ready", "warn");
+				log(error.message);
+			}
+		} finally {
+			voiceHeartbeatInFlight = false;
+		}
 	}, 3000);
 }
 
@@ -182,7 +240,8 @@ async function pollMessages() {
 	try {
 		const snapshot = await json(`${sessionBase}/messages`);
 		document.getElementById("project").textContent = snapshot.project;
-		document.getElementById("conversation-title").textContent = snapshot.project.split("/").filter(Boolean).pop() || "Conversation";
+		document.getElementById("conversation-title").textContent =
+			snapshot.project.split("/").filter(Boolean).pop() || "Conversation";
 		document.getElementById("usage").textContent = `Voice usage: ${snapshot.usage}`;
 		const serialized = JSON.stringify(snapshot.messages);
 		if (serialized === lastMessages) return;
@@ -193,14 +252,17 @@ async function pollMessages() {
 		for (const message of snapshot.messages) {
 			const bubble = document.createElement("article");
 			bubble.className = `message ${message.role === "user" ? "user" : "assistant"}`;
-			const label = document.createElement("span"); label.className = "label";
+			const label = document.createElement("span");
+			label.className = "label";
 			label.textContent = `${message.role === "user" ? "You" : "Assistant"} · ${message.source || "Pi"}`;
 			bubble.append(label, document.createTextNode(message.text));
 			container.append(bubble);
 		}
 		if (!snapshot.messages.length) container.textContent = "No messages yet. Send a message or start a call.";
 		if (nearBottom) window.scrollTo(0, document.documentElement.scrollHeight);
-	} finally { messagePollInFlight = false; }
+	} finally {
+		messagePollInFlight = false;
+	}
 }
 
 async function sendChatMessage(event) {
@@ -208,44 +270,93 @@ async function sendChatMessage(event) {
 	const input = document.getElementById("message");
 	const text = input.value.trim();
 	if (!text) return;
-	const button = document.getElementById("send"); button.disabled = true;
+	const button = document.getElementById("send");
+	button.disabled = true;
 	try {
-		await json(`${sessionBase}/message`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
+		await json(`${sessionBase}/message`, {
+			method: "POST",
+			headers: { "content-type": "application/json" },
+			body: JSON.stringify({ text }),
+		});
 		input.value = "";
 		document.getElementById("notice").textContent = "Sent to Pi. Replies appear as they are recorded.";
 		await pollMessages();
-	} catch (error) { showChatError(error); } finally { button.disabled = false; }
+	} catch (error) {
+		showChatError(error);
+	} finally {
+		button.disabled = false;
+	}
 }
 
-function showChatError(error) { document.getElementById("notice").textContent = error.message; }
+function showChatError(error) {
+	document.getElementById("notice").textContent = error.message;
+}
 
 function logAudioSettings(track) {
 	const settings = track.getSettings ? track.getSettings() : {};
-	log(`mic settings: echoCancellation=${String(settings.echoCancellation)} noiseSuppression=${String(settings.noiseSuppression)} autoGainControl=${String(settings.autoGainControl)} device=${settings.deviceId ? "set" : "unknown"}`);
-	if (settings.echoCancellation !== true) log("WARNING: browser did not confirm echoCancellation=true; use headphones or select a browser/device that supports AEC.");
+	log(
+		`mic settings: echoCancellation=${String(settings.echoCancellation)} noiseSuppression=${String(settings.noiseSuppression)} autoGainControl=${String(settings.autoGainControl)} device=${settings.deviceId ? "set" : "unknown"}`,
+	);
+	if (settings.echoCancellation !== true)
+		log(
+			"WARNING: browser did not confirm echoCancellation=true; use headphones or select a browser/device that supports AEC.",
+		);
 	if (settings.noiseSuppression !== true) log("WARNING: browser did not confirm noiseSuppression=true.");
 	if (settings.autoGainControl !== true) log("WARNING: browser did not confirm autoGainControl=true.");
 }
 
 function handleRealtimeEvent(event) {
 	traceRealtimeEvent("openai_inbound", event);
-	if (event.type === "response.function_call_arguments.done") return postEvent({ type: "tool_call", providerEventId: event.event_id, call: { voiceToolCallId: event.call_id, providerToolCallId: event.call_id, name: event.name, arguments: parseArgs(event.arguments) } });
-	if (event.type === "conversation.item.input_audio_transcription.completed") return handleInputAudioTranscription(event);
+	if (event.type === "response.function_call_arguments.done")
+		return postEvent({
+			type: "tool_call",
+			providerEventId: event.event_id,
+			call: {
+				voiceToolCallId: event.call_id,
+				providerToolCallId: event.call_id,
+				name: event.name,
+				arguments: parseArgs(event.arguments),
+			},
+		});
+	if (event.type === "conversation.item.input_audio_transcription.completed")
+		return handleInputAudioTranscription(event);
 	if (event.type === "conversation.item.input_audio_transcription.failed") {
 		const message = `Input transcription failed (${event.error?.code || "unknown"}): ${event.error?.message || "Check the configured transcription model/deployment."}`;
 		setStatus(message, "err");
 		return postEvent({ type: "error", providerEventId: event.event_id, message, recoverable: true });
 	}
-	if (event.type === "response.output_audio_transcript.done") return postEvent({ type: "assistant_transcript", providerEventId: event.event_id, text: event.transcript || "", final: true });
-	if (event.type === "response.output_text.done") return postEvent({ type: "assistant_transcript", providerEventId: event.event_id, text: event.text || "", final: true });
-	if (event.type === "input_audio_buffer.speech_started") return postEvent({ type: "turn_signal", providerEventId: event.event_id, signal: "speech_started" });
-	if (event.type === "input_audio_buffer.speech_stopped") return postEvent({ type: "turn_signal", providerEventId: event.event_id, signal: "speech_stopped" });
+	if (event.type === "response.output_audio_transcript.done")
+		return postEvent({
+			type: "assistant_transcript",
+			providerEventId: event.event_id,
+			text: event.transcript || "",
+			final: true,
+		});
+	if (event.type === "response.output_text.done")
+		return postEvent({
+			type: "assistant_transcript",
+			providerEventId: event.event_id,
+			text: event.text || "",
+			final: true,
+		});
+	if (event.type === "input_audio_buffer.speech_started")
+		return postEvent({ type: "turn_signal", providerEventId: event.event_id, signal: "speech_started" });
+	if (event.type === "input_audio_buffer.speech_stopped")
+		return postEvent({ type: "turn_signal", providerEventId: event.event_id, signal: "speech_stopped" });
 	if (event.type === "response.done") {
 		logUsage("response", event.response?.usage);
-		postEvent({ type: "usage", source: "response", providerEventId: event.event_id, realtimeEvent: event }).catch((error) => log(`usage post failed: ${error.message}`));
+		postEvent({ type: "usage", source: "response", providerEventId: event.event_id, realtimeEvent: event }).catch(
+			(error) => log(`usage post failed: ${error.message}`),
+		);
 		return postEvent({ type: "turn_signal", providerEventId: event.event_id, signal: "turn_complete" });
 	}
-	if (event.type === "error") return postEvent({ type: "error", providerEventId: event.event_id, message: event.error?.message || "OpenAI realtime error", recoverable: true });
+	if (event.type === "error")
+		return postEvent({
+			type: "error",
+			providerEventId: event.event_id,
+			message: event.error?.message || "OpenAI realtime error",
+			recoverable: true,
+		});
 }
 
 async function pollOutbox() {
@@ -263,13 +374,17 @@ async function pollOutbox() {
 			storeOutboxCursor(lastOutboxId);
 			if (item.event?.type === "pi.helper.close") {
 				traceRealtimeEvent("helper_close_from_outbox", item.event, { outboxId: item.id });
-				postEvent({ type: "outbox_ack", outboxId: item.id }, { log: false }).catch((error) => log(`outbox ack failed: ${error.message}`));
+				postEvent({ type: "outbox_ack", outboxId: item.id }, { log: false }).catch((error) =>
+					log(`outbox ack failed: ${error.message}`),
+				);
 				handleHelperClose(item.event);
 				return;
 			}
 			traceRealtimeEvent("openai_outbound_from_outbox", item.event, { outboxId: item.id });
 			dc.send(JSON.stringify(item.event));
-			postEvent({ type: "outbox_ack", outboxId: item.id }, { log: false }).catch((error) => log(`outbox ack failed: ${error.message}`));
+			postEvent({ type: "outbox_ack", outboxId: item.id }, { log: false }).catch((error) =>
+				log(`outbox ack failed: ${error.message}`),
+			);
 		}
 	} finally {
 		pollInFlight = false;
@@ -289,24 +404,61 @@ function storeOutboxCursor(value) {
 }
 
 function sendContext(packet) {
-	sendRealtime({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: `[pi-realtime:${packet.channel}:rev-${packet.revision}] ${packet.summary}\n\n${packet.sections.map((section) => `${section.title}\n${section.text}`).join("\n\n")}` }] } });
+	sendRealtime({
+		type: "conversation.item.create",
+		item: {
+			type: "message",
+			role: "system",
+			content: [
+				{
+					type: "input_text",
+					text: `[pi-realtime:${packet.channel}:rev-${packet.revision}] ${packet.summary}\n\n${packet.sections.map((section) => `${section.title}\n${section.text}`).join("\n\n")}`,
+				},
+			],
+		},
+	});
 }
 
 function handleInputAudioTranscription(event) {
 	const transcript = event.transcript || "";
 	logUsage("input transcription", event.usage);
-	postEvent({ type: "usage", source: "input_transcription", providerEventId: event.event_id, realtimeEvent: event }).catch((error) => log(`usage post failed: ${error.message}`));
-	postEvent({ type: "user_transcript", providerEventId: event.event_id, text: transcript, final: true }).catch((error) => log(`transcript post failed: ${error.message}`));
+	postEvent({
+		type: "usage",
+		source: "input_transcription",
+		providerEventId: event.event_id,
+		realtimeEvent: event,
+	}).catch((error) => log(`usage post failed: ${error.message}`));
+	postEvent({ type: "user_transcript", providerEventId: event.event_id, text: transcript, final: true }).catch(
+		(error) => log(`transcript post failed: ${error.message}`),
+	);
 	if (!transcript.trim()) {
-		trace("response_suppressed", { reason: "empty_transcript", providerEventId: event.event_id, itemId: event.item_id, transcriptTextLength: transcript.length });
+		trace("response_suppressed", {
+			reason: "empty_transcript",
+			providerEventId: event.event_id,
+			itemId: event.item_id,
+			transcriptTextLength: transcript.length,
+		});
 		return;
 	}
 	if (!isTranscriptActionable(transcript)) {
-		trace("response_suppressed", { reason: "low_information_transcript", providerEventId: event.event_id, itemId: event.item_id, transcriptTextLength: transcript.length, lexicalLength: lexicalContentLength(transcript) });
+		trace("response_suppressed", {
+			reason: "low_information_transcript",
+			providerEventId: event.event_id,
+			itemId: event.item_id,
+			transcriptTextLength: transcript.length,
+			lexicalLength: lexicalContentLength(transcript),
+		});
 		return;
 	}
 	if (interactionConfig?.transcriptHandling?.response !== "model") {
-		trace("response_suppressed", { reason: "transcript_does_not_trigger_response", policy: interactionConfig?.transcriptHandling?.response, providerEventId: event.event_id, itemId: event.item_id, transcriptTextLength: transcript.length, lexicalLength: lexicalContentLength(transcript) });
+		trace("response_suppressed", {
+			reason: "transcript_does_not_trigger_response",
+			policy: interactionConfig?.transcriptHandling?.response,
+			providerEventId: event.event_id,
+			itemId: event.item_id,
+			transcriptTextLength: transcript.length,
+			lexicalLength: lexicalContentLength(transcript),
+		});
 		return;
 	}
 	requestResponse("valid_transcript", event.event_id);
@@ -321,7 +473,10 @@ function lexicalContentLength(transcript) {
 }
 
 function requestResponse(reason, providerEventId) {
-	sendRealtime({ type: "response.create", response: { output_modalities: ["audio"] } }, { label: "openai_outbound_response_create", reason, providerEventId });
+	sendRealtime(
+		{ type: "response.create", response: { output_modalities: ["audio"] } },
+		{ label: "openai_outbound_response_create", reason, providerEventId },
+	);
 }
 
 function handleHelperClose(event) {
@@ -329,7 +484,9 @@ function handleHelperClose(event) {
 	log(`helper close: ${reason}`);
 	setStatus(`Session stopped: ${reason}`, "warn");
 	cleanupCurrentConnection();
-	postEvent({ type: "disconnected", reason: `helper close: ${reason}` }).catch((error) => log(`disconnect post failed: ${error.message}`));
+	postEvent({ type: "disconnected", reason: `helper close: ${reason}` }).catch((error) =>
+		log(`disconnect post failed: ${error.message}`),
+	);
 	// Keep chat/history visible when the voice session ends.
 }
 
@@ -343,17 +500,26 @@ function sendRealtime(event, traceOptions = {}) {
 async function postEvent(event, options = {}) {
 	if (companionMode) return; // Provider control and tool execution belong to the server.
 	if (options.log !== false) log(event.type);
-	await json(`${sessionBase}/event`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(event) });
+	await json(`${sessionBase}/event`, {
+		method: "POST",
+		headers: { "content-type": "application/json" },
+		body: JSON.stringify(event),
+	});
 }
 
 async function json(url, options) {
 	const response = await fetch(url, options);
-	if (!response.ok) throw Object.assign(new Error(`${url} failed: ${response.status} ${await response.text()}`), { status: response.status });
+	if (!response.ok)
+		throw Object.assign(new Error(`${url} failed: ${response.status} ${await response.text()}`), {
+			status: response.status,
+		});
 	return response.json();
 }
 
 function trace(label, data = {}) {
-	postEvent({ type: "trace", trace: { label, ...data } }, { log: false }).catch((error) => log(`trace post failed: ${error.message}`));
+	postEvent({ type: "trace", trace: { label, ...data } }, { log: false }).catch((error) =>
+		log(`trace post failed: ${error.message}`),
+	);
 }
 
 function traceRealtimeEvent(label, event, extra = {}) {
@@ -375,7 +541,8 @@ function createOutboxPollTracer() {
 			}
 			emptySinceAt ??= now;
 			emptyCount += 1;
-			if (emptyCount === 1 || emptyCount % emptyPollTraceInterval === 0) trace("outbox_poll_idle", { after, emptyPolls: emptyCount, emptySinceAt, lastAt: now });
+			if (emptyCount === 1 || emptyCount % emptyPollTraceInterval === 0)
+				trace("outbox_poll_idle", { after, emptyPolls: emptyCount, emptySinceAt, lastAt: now });
 		},
 	};
 }
@@ -403,7 +570,9 @@ function summarizeRealtimeEvent(event) {
 		name: event.name,
 		itemType: event.item?.type,
 		role: event.item?.role,
-		contentTypes: Array.isArray(event.item?.content) ? event.item.content.map((part) => part?.type).filter(Boolean) : undefined,
+		contentTypes: Array.isArray(event.item?.content)
+			? event.item.content.map((part) => part?.type).filter(Boolean)
+			: undefined,
 	};
 }
 
@@ -415,10 +584,12 @@ function addTextDetails(target, prefix, text) {
 
 function contentText(event) {
 	const content = Array.isArray(event.item?.content) ? event.item.content : undefined;
-	const parts = content?.flatMap((part) => {
-		const text = typeof part?.text === "string" ? part.text : typeof part?.transcript === "string" ? part.transcript : undefined;
-		return text === undefined ? [] : [text];
-	}) ?? [];
+	const parts =
+		content?.flatMap((part) => {
+			const text =
+				typeof part?.text === "string" ? part.text : typeof part?.transcript === "string" ? part.transcript : undefined;
+			return text === undefined ? [] : [text];
+		}) ?? [];
 	return parts.length > 0 ? parts.join("\n\n") : undefined;
 }
 
@@ -436,7 +607,9 @@ function logUsage(label, usage) {
 	if (!usage) return;
 	const input = usage.input_token_details || {};
 	const output = usage.output_token_details || {};
-	log(`usage ${label}: total=${usage.total_tokens || 0} input(text=${input.text_tokens || 0},audio=${input.audio_tokens || 0},cached=${input.cached_tokens || 0}) output(text=${output.text_tokens || 0},audio=${output.audio_tokens || 0})`);
+	log(
+		`usage ${label}: total=${usage.total_tokens || 0} input(text=${input.text_tokens || 0},audio=${input.audio_tokens || 0},cached=${input.cached_tokens || 0}) output(text=${output.text_tokens || 0},audio=${output.audio_tokens || 0})`,
+	);
 }
 
 function parseArgs(raw) {

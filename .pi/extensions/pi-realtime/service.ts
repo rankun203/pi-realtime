@@ -2,17 +2,56 @@ import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { branchChatMessages } from "./dashboard";
 import { formatUsageCost } from "./usage";
 import { createAudioManager, type AudioManager, type AudioManagerErrorKind } from "./audio-manager";
-import { configChanged, contextPacketSent, nextProviderSessionId, primaryChanged, providerEventObserved, sessionStarted, sessionStopped, usageObserved, usageReset, voiceToolCallReceived, voiceToolResultSent } from "./events";
+import {
+	configChanged,
+	contextPacketSent,
+	nextProviderSessionId,
+	primaryChanged,
+	providerEventObserved,
+	sessionStarted,
+	sessionStopped,
+	usageObserved,
+	usageReset,
+	voiceToolCallReceived,
+	voiceToolResultSent,
+} from "./events";
 import { createDebugTraceRegistry, describeProviderEvent } from "./debug-trace";
 import { interactionMode, toolSurfaceFor } from "./domain/interaction-modes";
 import { chunkRealtimePushSpeech, type SpeechChunk } from "./domain/speech-chunking";
-import { routeTranscriptToInstruction, type TranscriptRouteDecision, type UserTranscriptEvent } from "./domain/transcript-routing";
+import {
+	routeTranscriptToInstruction,
+	type TranscriptRouteDecision,
+	type UserTranscriptEvent,
+} from "./domain/transcript-routing";
 import { buildCitationPacket, buildStatePacket, buildToolSurfacePacket, nextContextRevision } from "./state-packets";
 import type { ControlPlane } from "./control-plane";
 import type { FakeRealtimeProviderAdapter } from "./providers/fake";
 import { createDefaultProviderRuntimeRegistry, type ProviderRuntimeRegistry } from "./providers/runtime";
-import type { ProviderEventSink, RealtimeContextPushRequest, RealtimeProviderAdapter, ToolResultResponsePolicy } from "./providers/types";
-import type { CitationDeck, ContextPacket, NormalizedProviderEvent, ProviderDeliveryReceipt, ProviderKind, ProviderMediaMode, ProviderPreferences, ProviderSessionId, RealtimeContextPushInput, RealtimeInteractionModeId, RealtimeState, VoiceInstructionInput, VoiceInstructionReceipt, VoiceToolCallRecord, VoiceToolName, VoiceToolResultRecord, VoiceToolSurface } from "./types";
+import type {
+	ProviderEventSink,
+	RealtimeContextPushRequest,
+	RealtimeProviderAdapter,
+	ToolResultResponsePolicy,
+} from "./providers/types";
+import type {
+	CitationDeck,
+	ContextPacket,
+	NormalizedProviderEvent,
+	ProviderDeliveryReceipt,
+	ProviderKind,
+	ProviderMediaMode,
+	ProviderPreferences,
+	ProviderSessionId,
+	RealtimeContextPushInput,
+	RealtimeInteractionModeId,
+	RealtimeState,
+	VoiceInstructionInput,
+	VoiceInstructionReceipt,
+	VoiceToolCallRecord,
+	VoiceToolName,
+	VoiceToolResultRecord,
+	VoiceToolSurface,
+} from "./types";
 import type { Store } from "./store";
 import { executeVoiceTool } from "./tools/realtime";
 import { aggregateUsage, renderStatusText, renderUsageSummary } from "./view";
@@ -28,11 +67,24 @@ export type Service = {
 	defaultInteractionMode(): RealtimeInteractionModeId;
 	setDefaultInteractionMode(mode: RealtimeInteractionModeId): string;
 	startChat(ctx: ExtensionContext): Promise<string>;
-	startSession(input: { provider: ProviderKind; model: string; personaId?: string; primary?: boolean; interactionMode?: RealtimeInteractionModeId }, ctx: ExtensionContext): Promise<ProviderSessionId>;
+	startSession(
+		input: {
+			provider: ProviderKind;
+			model: string;
+			personaId?: string;
+			primary?: boolean;
+			interactionMode?: RealtimeInteractionModeId;
+		},
+		ctx: ExtensionContext,
+	): Promise<ProviderSessionId>;
 	stopSession(providerSessionId: ProviderSessionId, reason?: string): Promise<void>;
 	setPrimary(providerSessionId: ProviderSessionId | null): void;
 	observeCitationDeck(ctx: ExtensionContext): CitationDeck;
-	buildPackets(ctx: ExtensionContext, providerSessionId: ProviderSessionId, surface?: VoiceToolSurface): ContextPacket[];
+	buildPackets(
+		ctx: ExtensionContext,
+		providerSessionId: ProviderSessionId,
+		surface?: VoiceToolSurface,
+	): ContextPacket[];
 	recordToolCall(call: VoiceToolCallRecord): void;
 	recordToolResult(result: VoiceToolResultRecord, policy?: ToolResultResponsePolicy): Promise<void>;
 	submitInstruction(input: VoiceInstructionInput): Promise<void>;
@@ -48,13 +100,21 @@ export type Service = {
 	resetUsage(providerSessionId?: ProviderSessionId): string;
 	updateProviderPreference(provider: ProviderKind, patch: Partial<ProviderPreferences>): string;
 	providerPreference(provider: ProviderKind): ProviderPreferences;
-	startSessionMedia(providerSessionId: ProviderSessionId, mode: ProviderMediaMode, ctx: ExtensionContext): Promise<string>;
+	startSessionMedia(
+		providerSessionId: ProviderSessionId,
+		mode: ProviderMediaMode,
+		ctx: ExtensionContext,
+	): Promise<string>;
 	stopSessionMedia(providerSessionId?: ProviderSessionId): Promise<void>;
 	mediaStatus(providerSessionId?: ProviderSessionId): string;
 	debugText(providerSessionId?: ProviderSessionId): string;
 	providerWarning(provider: ProviderKind): string | undefined;
 	simulateFakeTranscript(providerSessionId: ProviderSessionId, text: string, final?: boolean): void;
-	simulateFakeToolCall(providerSessionId: ProviderSessionId, name: VoiceToolName, args?: Record<string, unknown>): Promise<string>;
+	simulateFakeToolCall(
+		providerSessionId: ProviderSessionId,
+		name: VoiceToolName,
+		args?: Record<string, unknown>,
+	): Promise<string>;
 	shutdown(): Promise<void>;
 };
 export function createService(store: Store, controlPlane: ControlPlane, onUsage?: () => void): Service {
@@ -66,49 +126,93 @@ class RealtimeService implements Service {
 	private chatStart: Promise<string> | undefined;
 	private readonly adapters = new Map<ProviderSessionId, RealtimeProviderAdapter>();
 	private readonly fakeAdapters = new Map<ProviderSessionId, FakeRealtimeProviderAdapter>();
-	private readonly audioManager: AudioManager = createAudioManager((providerSessionId, kind, error) => this.handleAudioError(providerSessionId, kind, error));
+	private readonly audioManager: AudioManager = createAudioManager((providerSessionId, kind, error) =>
+		this.handleAudioError(providerSessionId, kind, error),
+	);
 	private readonly rawEchoWarnings = new Set<ProviderSessionId>();
 	private readonly debugTraces = createDebugTraceRegistry();
 	private readonly providers: ProviderRuntimeRegistry = createDefaultProviderRuntimeRegistry(this.debugTraces);
-	private readonly providerSink: ProviderEventSink = { onProviderEvent: (event) => void this.handleProviderEvent(event), onProviderAudio: (chunk) => this.handleProviderAudio(chunk) };
-	constructor(private readonly store: Store, private readonly controlPlane: ControlPlane, private readonly onUsage?: () => void) {}
-	refresh(ctx: ExtensionContext): void { this.currentCtx = ctx; this.store.hydrate(ctx); }
-	state(): RealtimeState { return this.store.state(); }
-	toolSurface(): VoiceToolSurface { return toolSurfaceFor(this.defaultInteractionMode()); }
-	statusText(): string { return renderStatusText(this.store.state()); }
+	private readonly providerSink: ProviderEventSink = {
+		onProviderEvent: (event) => void this.handleProviderEvent(event),
+		onProviderAudio: (chunk) => this.handleProviderAudio(chunk),
+	};
+	constructor(
+		private readonly store: Store,
+		private readonly controlPlane: ControlPlane,
+		private readonly onUsage?: () => void,
+	) {}
+	refresh(ctx: ExtensionContext): void {
+		this.currentCtx = ctx;
+		this.store.hydrate(ctx);
+	}
+	state(): RealtimeState {
+		return this.store.state();
+	}
+	toolSurface(): VoiceToolSurface {
+		return toolSurfaceFor(this.defaultInteractionMode());
+	}
+	statusText(): string {
+		return renderStatusText(this.store.state());
+	}
 	realtimeStatusText(providerSessionId?: ProviderSessionId): string {
 		const state = this.store.state();
-		const activeCount = [...state.sessions.values()].filter((session) => session.status === "active" || session.status === "starting").length;
+		const activeCount = [...state.sessions.values()].filter(
+			(session) => session.status === "active" || session.status === "starting",
+		).length;
 		const target = providerSessionId ?? this.defaultRealtimePushTarget();
 		const live = target ? this.adapters.has(target) : false;
 		return [
 			renderStatusText(state),
-			activeCount === 0 ? "Realtime is not currently active: 0 active provider sessions means do not use realtime_send_* tools." : `Realtime active session count: ${activeCount}`,
+			activeCount === 0
+				? "Realtime is not currently active: 0 active provider sessions means do not use realtime_send_* tools."
+				: `Realtime active session count: ${activeCount}`,
 			`realtime_send target: ${target ?? "none"}`,
 			`target live: ${live ? "yes" : "no"}`,
-			live ? "Pi can use realtime_send_ack, realtime_send_status, or realtime_send_text for this target." : "No live realtime send target is available; continue normally in Pi and do not retry realtime_send_* tools until a new realtime active-session context message or realtime_status reports target live: yes.",
+			live
+				? "Pi can use realtime_send_ack, realtime_send_status, or realtime_send_text for this target."
+				: "No live realtime send target is available; continue normally in Pi and do not retry realtime_send_* tools until a new realtime active-session context message or realtime_status reports target live: yes.",
 		].join("\n");
 	}
-	defaultModelFor(provider: ProviderKind): string { return this.providerPreference(provider).defaultModel ?? this.requireProviderRuntime(provider).defaultModel(); }
+	defaultModelFor(provider: ProviderKind): string {
+		return this.providerPreference(provider).defaultModel ?? this.requireProviderRuntime(provider).defaultModel();
+	}
 	availableModelsFor(provider: ProviderKind): readonly string[] {
 		const runtime = this.requireProviderRuntime(provider);
 		return runtime.availableModels?.() ?? [runtime.defaultModel()];
 	}
 	setDefaultModel(provider: ProviderKind, model: string): string {
 		const available = this.availableModelsFor(provider);
-		if (!available.includes(model)) throw new Error(`${provider} realtime model must be one of: ${available.join(", ")}.`);
-		this.store.append(configChanged({ providerPreferences: { ...this.store.state().config.providerPreferences, [provider]: { ...this.providerPreference(provider), defaultModel: model } } }));
+		if (!available.includes(model))
+			throw new Error(`${provider} realtime model must be one of: ${available.join(", ")}.`);
+		this.store.append(
+			configChanged({
+				providerPreferences: {
+					...this.store.state().config.providerPreferences,
+					[provider]: { ...this.providerPreference(provider), defaultModel: model },
+				},
+			}),
+		);
 		return `${provider} realtime default model set to ${model}. New sessions will use this model unless --model overrides it.`;
 	}
-	defaultInteractionMode(): RealtimeInteractionModeId { return this.store.state().config.defaultInteractionMode; }
+	defaultInteractionMode(): RealtimeInteractionModeId {
+		return this.store.state().config.defaultInteractionMode;
+	}
 	setDefaultInteractionMode(mode: RealtimeInteractionModeId): string {
 		this.store.append(configChanged({ defaultInteractionMode: mode }));
 		return `Default realtime interaction mode set to ${mode}. New sessions will use this mode unless --mode overrides it.`;
 	}
-	setPrimary(providerSessionId: ProviderSessionId | null): void { this.store.append(primaryChanged(providerSessionId)); }
-	observeCitationDeck(ctx: ExtensionContext): CitationDeck { return this.controlPlane.observeCitations(ctx); }
-	recordToolCall(call: VoiceToolCallRecord): void { this.store.append(voiceToolCallReceived(call)); }
-	submitInstruction(input: VoiceInstructionInput): Promise<void> { return this.controlPlane.instructionSink.sendInstruction(input).then(() => undefined); }
+	setPrimary(providerSessionId: ProviderSessionId | null): void {
+		this.store.append(primaryChanged(providerSessionId));
+	}
+	observeCitationDeck(ctx: ExtensionContext): CitationDeck {
+		return this.controlPlane.observeCitations(ctx);
+	}
+	recordToolCall(call: VoiceToolCallRecord): void {
+		this.store.append(voiceToolCallReceived(call));
+	}
+	submitInstruction(input: VoiceInstructionInput): Promise<void> {
+		return this.controlPlane.instructionSink.sendInstruction(input).then(() => undefined);
+	}
 	async sendTextInput(providerSessionId: ProviderSessionId, text: string): Promise<void> {
 		const adapter = this.adapters.get(providerSessionId);
 		if (!adapter) throw new Error(`No live provider adapter for ${providerSessionId}`);
@@ -119,19 +223,29 @@ class RealtimeService implements Service {
 		const text = input.text.trim();
 		if (!text) throw new Error("realtime_send_* requires non-empty text.");
 		const providerSessionId = input.providerSessionId ?? this.defaultRealtimePushTarget();
-		if (!providerSessionId) return "No active realtime session is available; the realtime update was not sent. Realtime is not currently active, so do not retry realtime_send_* tools until a new realtime active-session context message arrives or realtime_status reports target live: yes.";
+		if (!providerSessionId)
+			return "No active realtime session is available; the realtime update was not sent. Realtime is not currently active, so do not retry realtime_send_* tools until a new realtime active-session context message arrives or realtime_status reports target live: yes.";
 		const adapter = this.adapters.get(providerSessionId);
-		if (!adapter) return `Realtime session ${providerSessionId} is not currently live; the realtime update was not sent. Do not retry realtime_send_* tools for this target until a new realtime active-session context message arrives or realtime_status reports target live: yes.`;
+		if (!adapter)
+			return `Realtime session ${providerSessionId} is not currently live; the realtime update was not sent. Do not retry realtime_send_* tools for this target until a new realtime active-session context message arrives or realtime_status reports target live: yes.`;
 		const session = this.requireSession(providerSessionId);
 		const runtime = this.requireProviderRuntime(session.provider);
-		const chunks = chunkRealtimePushSpeech({ push: input, text, providerProfile: runtime.behaviorProfileForModel?.(session.model), interactionMode: session.interactionMode });
+		const chunks = chunkRealtimePushSpeech({
+			push: input,
+			text,
+			providerProfile: runtime.behaviorProfileForModel?.(session.model),
+			interactionMode: session.interactionMode,
+		});
 		let lastMessage = "Realtime context push accepted";
 		for (const chunk of chunks) {
 			const request = chunkRequest(input, chunk);
 			const receipt = await adapter.pushContext(request);
 			lastMessage = receipt.message ?? lastMessage;
 			this.traceRealtimeContextPush(providerSessionId, request, receipt);
-			if (receipt.status === "failed") throw new Error(`Realtime context push failed for chunk ${chunk.index} of ${chunk.count}: ${receipt.message ?? "provider reported failure"}`);
+			if (receipt.status === "failed")
+				throw new Error(
+					`Realtime context push failed for chunk ${chunk.index} of ${chunk.count}: ${receipt.message ?? "provider reported failure"}`,
+				);
 		}
 		return renderChunkedPushResult(providerSessionId, chunks, lastMessage);
 	}
@@ -169,19 +283,35 @@ class RealtimeService implements Service {
 		const summary = renderUsageSummary(aggregateUsage(state.usage, providerSessionId, state.usageResets), details);
 		if (providerSessionId) {
 			const session = state.sessions.get(providerSessionId);
-			return session ? [`session: ${session.providerSessionId} ${session.provider}/${session.model} ${session.status}`, summary].join("\n") : summary;
+			return session
+				? [
+						`session: ${session.providerSessionId} ${session.provider}/${session.model} ${session.status}`,
+						summary,
+					].join("\n")
+				: summary;
 		}
-		const sessions = [...state.sessions.values()].map((session) => `- ${session.providerSessionId} ${session.provider}/${session.model} ${session.status}`);
+		const sessions = [...state.sessions.values()].map(
+			(session) => `- ${session.providerSessionId} ${session.provider}/${session.model} ${session.status}`,
+		);
 		return sessions.length > 0 ? [summary, "sessions:", ...sessions].join("\n") : summary;
 	}
 
 	resetUsage(providerSessionId?: ProviderSessionId): string {
 		this.store.append(usageReset(providerSessionId));
-		return providerSessionId ? `Reset realtime usage counters for ${providerSessionId}. Historical usage events were preserved.` : "Reset realtime usage counters. Historical usage events were preserved.";
+		return providerSessionId
+			? `Reset realtime usage counters for ${providerSessionId}. Historical usage events were preserved.`
+			: "Reset realtime usage counters. Historical usage events were preserved.";
 	}
 
 	updateProviderPreference(provider: ProviderKind, patch: Partial<ProviderPreferences>): string {
-		this.store.append(configChanged({ providerPreferences: { ...this.store.state().config.providerPreferences, [provider]: { ...this.providerPreference(provider), ...patch } } }));
+		this.store.append(
+			configChanged({
+				providerPreferences: {
+					...this.store.state().config.providerPreferences,
+					[provider]: { ...this.providerPreference(provider), ...patch },
+				},
+			}),
+		);
 		return `${provider} media preference updated.`;
 	}
 
@@ -190,50 +320,95 @@ class RealtimeService implements Service {
 	}
 
 	startChat(ctx: ExtensionContext): Promise<string> {
-		this.chatStart ??= this.ensureChat(ctx).finally(() => { this.chatStart = undefined; });
+		this.chatStart ??= this.ensureChat(ctx).finally(() => {
+			this.chatStart = undefined;
+		});
 		return this.chatStart;
 	}
 
 	private async ensureChat(ctx: ExtensionContext): Promise<string> {
 		const state = this.store.state();
-		const sessions = [...state.sessions.values()].filter((session) => session.provider === "openai" && session.interactionMode === "agent" && session.status === "active");
-		const existing = sessions.find((session) => session.providerSessionId === state.primaryProviderSessionId) ?? sessions.at(-1);
-		const id = existing?.providerSessionId ?? await this.startSession({ provider: "openai", model: this.defaultModelFor("openai"), interactionMode: "agent", primary: true }, ctx);
-		const currentUrl = this.adapters.get(id)?.mediaMode === "webrtc" ? this.providers.get("openai")?.media?.webrtc?.urlFor?.(id) : undefined;
-		const url = currentUrl ?? await this.startSessionMedia(id, "webrtc", ctx);
+		const sessions = [...state.sessions.values()].filter(
+			(session) => session.provider === "openai" && session.interactionMode === "agent" && session.status === "active",
+		);
+		const existing =
+			sessions.find((session) => session.providerSessionId === state.primaryProviderSessionId) ?? sessions.at(-1);
+		const id =
+			existing?.providerSessionId ??
+			(await this.startSession(
+				{ provider: "openai", model: this.defaultModelFor("openai"), interactionMode: "agent", primary: true },
+				ctx,
+			));
+		const currentUrl =
+			this.adapters.get(id)?.mediaMode === "webrtc"
+				? this.providers.get("openai")?.media?.webrtc?.urlFor?.(id)
+				: undefined;
+		const url = currentUrl ?? (await this.startSessionMedia(id, "webrtc", ctx));
 		this.setPrimary(id);
 		return url;
 	}
 
-	async startSessionMedia(providerSessionId: ProviderSessionId, mediaMode: ProviderMediaMode, ctx: ExtensionContext): Promise<string> {
+	async startSessionMedia(
+		providerSessionId: ProviderSessionId,
+		mediaMode: ProviderMediaMode,
+		ctx: ExtensionContext,
+	): Promise<string> {
 		const session = this.requireSession(providerSessionId);
 		const media = this.providers.get(session.provider)?.media?.[mediaMode];
 		if (!media) throw new Error(`${session.provider} does not support ${mediaMode} media.`);
 		const interaction = interactionMode(session.interactionMode);
 		const packets = this.buildPackets(ctx, providerSessionId, interaction.toolSurface);
-		const speechRendererMode = this.providers.get(session.provider)?.behaviorProfileForModel?.(session.model).backendUpdateSpeech?.rendering?.systemPromptMode;
-		return media.start({ session, ctx, dashboard: {
-			pi: this.controlPlane.voiceBridge?.(),
-			snapshot: () => ({ messages: branchChatMessages(ctx.sessionManager.getBranch()), project: ctx.cwd, usage: formatUsageCost(aggregateUsage(this.state().usage, providerSessionId, this.state().usageResets)) }),
-			sendMessage: async (text) => { this.controlPlane.sendChatMessage(text); },
-		}, surface: interaction.toolSurface, systemPrompt: interaction.systemPrompt(interaction.toolSurface, speechRendererMode), interaction: interaction.providerInteraction, sink: this.providerSink, packets, currentAdapter: this.adapters.get(providerSessionId), setAdapter: (adapter) => this.setAdapter(providerSessionId, adapter), stopLocalMedia: (id) => this.stopLocalMedia(id), recordContext: (packet, adapter) => this.recordContextPacket(providerSessionId, packet, adapter) });
+		const speechRendererMode = this.providers.get(session.provider)?.behaviorProfileForModel?.(session.model)
+			.backendUpdateSpeech?.rendering?.systemPromptMode;
+		return media.start({
+			session,
+			ctx,
+			dashboard: {
+				pi: this.controlPlane.voiceBridge?.(),
+				snapshot: () => ({
+					messages: branchChatMessages(ctx.sessionManager.getBranch()),
+					project: ctx.cwd,
+					usage: formatUsageCost(aggregateUsage(this.state().usage, providerSessionId, this.state().usageResets)),
+				}),
+				sendMessage: async (text) => {
+					this.controlPlane.sendChatMessage(text);
+				},
+			},
+			surface: interaction.toolSurface,
+			systemPrompt: interaction.systemPrompt(interaction.toolSurface, speechRendererMode),
+			interaction: interaction.providerInteraction,
+			sink: this.providerSink,
+			packets,
+			currentAdapter: this.adapters.get(providerSessionId),
+			setAdapter: (adapter) => this.setAdapter(providerSessionId, adapter),
+			stopLocalMedia: (id) => this.stopLocalMedia(id),
+			recordContext: (packet, adapter) => this.recordContextPacket(providerSessionId, packet, adapter),
+		});
 	}
 
 	async stopSessionMedia(providerSessionId?: ProviderSessionId): Promise<void> {
-		const ids = providerSessionId ? [providerSessionId] : [...this.adapters].filter(([, adapter]) => adapter.mediaMode === "webrtc").map(([id]) => id);
+		const ids = providerSessionId
+			? [providerSessionId]
+			: [...this.adapters].filter(([, adapter]) => adapter.mediaMode === "webrtc").map(([id]) => id);
 		for (const id of ids) {
 			const adapter = this.adapters.get(id);
 			if (adapter?.mediaMode !== "webrtc") continue;
 			await adapter.disconnect("user");
 			this.adapters.delete(id);
 		}
-		const stopSharedRuntime = !providerSessionId || ![...this.adapters.values()].some((adapter) => adapter.mediaMode === "webrtc");
-		for (const runtime of this.providers.list()) await runtime.media?.webrtc?.stop(stopSharedRuntime ? undefined : providerSessionId);
+		const stopSharedRuntime =
+			!providerSessionId || ![...this.adapters.values()].some((adapter) => adapter.mediaMode === "webrtc");
+		for (const runtime of this.providers.list())
+			await runtime.media?.webrtc?.stop(stopSharedRuntime ? undefined : providerSessionId);
 	}
 
 	mediaStatus(providerSessionId?: ProviderSessionId): string {
 		const session = providerSessionId ? this.store.state().sessions.get(providerSessionId) : undefined;
-		if (session) return this.providers.get(session.provider)?.media?.webrtc?.status() ?? `${session.provider} has no WebRTC media runtime.`;
+		if (session)
+			return (
+				this.providers.get(session.provider)?.media?.webrtc?.status() ??
+				`${session.provider} has no WebRTC media runtime.`
+			);
 		return this.providers.get("openai")?.media?.webrtc?.status() ?? "webrtc media: unavailable";
 	}
 
@@ -245,30 +420,52 @@ class RealtimeService implements Service {
 		return this.providers.get(provider)?.warningForPreferences?.(this.providerPreference(provider));
 	}
 
-	async startSession(input: { provider: ProviderKind; model: string; personaId?: string; primary?: boolean; interactionMode?: RealtimeInteractionModeId }, ctx: ExtensionContext): Promise<ProviderSessionId> {
+	async startSession(
+		input: {
+			provider: ProviderKind;
+			model: string;
+			personaId?: string;
+			primary?: boolean;
+			interactionMode?: RealtimeInteractionModeId;
+		},
+		ctx: ExtensionContext,
+	): Promise<ProviderSessionId> {
 		const runtime = this.requireProviderRuntime(input.provider);
 		runtime.assertCredentials();
 		const providerSessionId = nextProviderSessionId(input.provider);
 		const mode = interactionMode(input.interactionMode ?? this.defaultInteractionMode());
 		const personaId = input.personaId ?? "default";
-		this.store.append(sessionStarted({ providerSessionId, provider: input.provider, model: input.model, personaId, interactionMode: mode.id }));
+		this.store.append(
+			sessionStarted({
+				providerSessionId,
+				provider: input.provider,
+				model: input.model,
+				personaId,
+				interactionMode: mode.id,
+			}),
+		);
 		if (input.primary ?? true) this.store.append(primaryChanged(providerSessionId));
 		const packets = this.buildPackets(ctx, providerSessionId, mode.toolSurface);
 		const adapter = runtime.createAdapter({ providerSessionId });
-		const speechRendererMode = runtime.behaviorProfileForModel?.(input.model).backendUpdateSpeech?.rendering?.systemPromptMode;
+		const speechRendererMode = runtime.behaviorProfileForModel?.(input.model).backendUpdateSpeech?.rendering
+			?.systemPromptMode;
 		this.setAdapter(providerSessionId, adapter);
-		await adapter.connect({
-			providerSessionId,
-			provider: input.provider,
-			model: input.model,
-			personaId,
-			systemPrompt: mode.systemPrompt(mode.toolSurface, speechRendererMode),
-			toolSurface: mode.toolSurface,
-			initialContext: packets[0],
-			capabilities: { preferPassiveContext: input.provider === "fake", preferSemanticVad: input.provider !== "fake" },
-			interaction: mode.providerInteraction,
-		}, this.providerSink);
-		for (const packet of input.provider === "fake" ? packets : packets.slice(1)) await this.recordContextPacket(providerSessionId, packet, adapter);
+		await adapter.connect(
+			{
+				providerSessionId,
+				provider: input.provider,
+				model: input.model,
+				personaId,
+				systemPrompt: mode.systemPrompt(mode.toolSurface, speechRendererMode),
+				toolSurface: mode.toolSurface,
+				initialContext: packets[0],
+				capabilities: { preferPassiveContext: input.provider === "fake", preferSemanticVad: input.provider !== "fake" },
+				interaction: mode.providerInteraction,
+			},
+			this.providerSink,
+		);
+		for (const packet of input.provider === "fake" ? packets : packets.slice(1))
+			await this.recordContextPacket(providerSessionId, packet, adapter);
 		const session = this.store.state().sessions.get(providerSessionId);
 		if (session) this.controlPlane.sendSessionAwareness(session, true);
 		return providerSessionId;
@@ -286,11 +483,19 @@ class RealtimeService implements Service {
 		if (session) this.controlPlane.sendSessionAwareness(session, false);
 	}
 
-	buildPackets(ctx: ExtensionContext, providerSessionId: ProviderSessionId, surface = this.toolSurfaceForSession(providerSessionId)): ContextPacket[] {
+	buildPackets(
+		ctx: ExtensionContext,
+		providerSessionId: ProviderSessionId,
+		surface = this.toolSurfaceForSession(providerSessionId),
+	): ContextPacket[] {
 		const state = this.store.state();
 		const target = this.controlPlane.currentTarget(ctx);
 		const citationDeck = this.controlPlane.observeCitations(ctx);
-		return [buildToolSurfacePacket(surface, target), buildStatePacket(state, target, nextContextRevision(state, providerSessionId, "pi_state")), buildCitationPacket(citationDeck, target)];
+		return [
+			buildToolSurfacePacket(surface, target),
+			buildStatePacket(state, target, nextContextRevision(state, providerSessionId, "pi_state")),
+			buildCitationPacket(citationDeck, target),
+		];
 	}
 
 	async recordToolResult(result: VoiceToolResultRecord, policy: ToolResultResponsePolicy = "none"): Promise<void> {
@@ -303,14 +508,20 @@ class RealtimeService implements Service {
 		adapter.simulateTranscript(text, final);
 	}
 
-	async simulateFakeToolCall(providerSessionId: ProviderSessionId, name: VoiceToolName, args: Record<string, unknown> = {}): Promise<string> {
+	async simulateFakeToolCall(
+		providerSessionId: ProviderSessionId,
+		name: VoiceToolName,
+		args: Record<string, unknown> = {},
+	): Promise<string> {
 		return this.requireFakeAdapter(providerSessionId).simulateToolCall(name, args);
 	}
 
 	async shutdown(): Promise<void> {
 		await this.audioManager.shutdown((providerSessionId) => this.adapters.get(providerSessionId));
 		await this.stopSessionMedia();
-		for (const session of this.store.state().sessions.values()) if (session.status === "active" || session.status === "starting") await this.stopSession(session.providerSessionId, "shutdown");
+		for (const session of this.store.state().sessions.values())
+			if (session.status === "active" || session.status === "starting")
+				await this.stopSession(session.providerSessionId, "shutdown");
 		this.currentCtx = undefined;
 	}
 
@@ -335,7 +546,8 @@ class RealtimeService implements Service {
 		const state = this.store.state();
 		const lastInstructionTarget = state.lastInstruction?.providerSessionId;
 		if (lastInstructionTarget && this.adapters.has(lastInstructionTarget)) return lastInstructionTarget;
-		if (state.primaryProviderSessionId && this.adapters.has(state.primaryProviderSessionId)) return state.primaryProviderSessionId;
+		if (state.primaryProviderSessionId && this.adapters.has(state.primaryProviderSessionId))
+			return state.primaryProviderSessionId;
 		const ids = [...this.adapters.keys()];
 		for (let index = ids.length - 1; index >= 0; index -= 1) {
 			const id = ids[index] as ProviderSessionId;
@@ -351,14 +563,24 @@ class RealtimeService implements Service {
 	}
 
 	private toolSurfaceForSession(providerSessionId: ProviderSessionId): VoiceToolSurface {
-		return toolSurfaceFor(this.store.state().sessions.get(providerSessionId)?.interactionMode ?? this.defaultInteractionMode());
+		return toolSurfaceFor(
+			this.store.state().sessions.get(providerSessionId)?.interactionMode ?? this.defaultInteractionMode(),
+		);
 	}
 
-	private async recordContextPacket(providerSessionId: ProviderSessionId, packet: ContextPacket, adapter: RealtimeProviderAdapter): Promise<void> {
+	private async recordContextPacket(
+		providerSessionId: ProviderSessionId,
+		packet: ContextPacket,
+		adapter: RealtimeProviderAdapter,
+	): Promise<void> {
 		this.store.append(contextPacketSent(providerSessionId, packet, await adapter.updateContext(packet)));
 	}
 
-	private traceRealtimeContextPush(providerSessionId: ProviderSessionId, request: RealtimeContextPushRequest, receipt: ProviderDeliveryReceipt): void {
+	private traceRealtimeContextPush(
+		providerSessionId: ProviderSessionId,
+		request: RealtimeContextPushRequest,
+		receipt: ProviderDeliveryReceipt,
+	): void {
 		this.debugTraces.recorderFor(providerSessionId)?.write({
 			source: "service",
 			direction: "pi_realtime_context_push",
@@ -397,7 +619,13 @@ class RealtimeService implements Service {
 		const ctx = this.currentCtx;
 		if (!ctx) return this.traceTranscriptRoute(event, { action: "ignore", reason: "missing_context" });
 		const deck = this.controlPlane.observeCitations(ctx);
-		const decision = routeTranscriptToInstruction({ event, session, mode: interactionMode(session.interactionMode), target: this.controlPlane.currentTarget(ctx), citationDeckRevision: deck.revision });
+		const decision = routeTranscriptToInstruction({
+			event,
+			session,
+			mode: interactionMode(session.interactionMode),
+			target: this.controlPlane.currentTarget(ctx),
+			citationDeckRevision: deck.revision,
+		});
 		this.traceTranscriptRoute(event, decision);
 		if (decision.action !== "submit_instruction") return;
 		const receipt = await this.controlPlane.instructionSink.sendInstruction(decision.input);
@@ -409,7 +637,16 @@ class RealtimeService implements Service {
 		const mode = interactionMode(session?.interactionMode);
 		if (!mode.acceptModelToolCalls) {
 			this.traceRejectedToolCall(call, mode.id);
-			await this.recordToolResult({ voiceToolCallId: call.voiceToolCallId, providerSessionId: call.providerSessionId, status: "failed", resultText: "Tool calls are not available in this realtime interaction mode.", at: Date.now() }, "none");
+			await this.recordToolResult(
+				{
+					voiceToolCallId: call.voiceToolCallId,
+					providerSessionId: call.providerSessionId,
+					status: "failed",
+					resultText: "Tool calls are not available in this realtime interaction mode.",
+					at: Date.now(),
+				},
+				"none",
+			);
 			return;
 		}
 		this.store.append(voiceToolCallReceived(call));
@@ -417,19 +654,48 @@ class RealtimeService implements Service {
 	}
 
 	private traceProviderEvent(event: NormalizedProviderEvent): void {
-		this.debugTraces.recorderFor(event.providerSessionId)?.write({ source: "service", direction: "provider_event", ...describeProviderEvent(event) });
+		this.debugTraces
+			.recorderFor(event.providerSessionId)
+			?.write({ source: "service", direction: "provider_event", ...describeProviderEvent(event) });
 	}
 
-	private traceTranscriptRoute(event: UserTranscriptEvent, decision: TranscriptRouteDecision | { action: "ignore"; reason: "missing_session" | "missing_context" }): void {
-		this.debugTraces.recorderFor(event.providerSessionId)?.write({ source: "service", direction: "transcript_route", providerEventId: event.providerEventId, final: event.final, textLength: event.text.length, action: decision.action, reason: "reason" in decision ? decision.reason : undefined, instructionId: decision.action === "submit_instruction" ? decision.input.instructionId : undefined });
+	private traceTranscriptRoute(
+		event: UserTranscriptEvent,
+		decision: TranscriptRouteDecision | { action: "ignore"; reason: "missing_session" | "missing_context" },
+	): void {
+		this.debugTraces.recorderFor(event.providerSessionId)?.write({
+			source: "service",
+			direction: "transcript_route",
+			providerEventId: event.providerEventId,
+			final: event.final,
+			textLength: event.text.length,
+			action: decision.action,
+			reason: "reason" in decision ? decision.reason : undefined,
+			instructionId: decision.action === "submit_instruction" ? decision.input.instructionId : undefined,
+		});
 	}
 
 	private traceInstructionSubmission(input: VoiceInstructionInput, receipt: VoiceInstructionReceipt): void {
-		this.debugTraces.recorderFor(input.providerSessionId)?.write({ source: "service", direction: "instruction_submission", providerSessionId: input.providerSessionId, instructionId: input.instructionId, instructionSource: input.source, delivery: receipt.delivery, status: receipt.status });
+		this.debugTraces.recorderFor(input.providerSessionId)?.write({
+			source: "service",
+			direction: "instruction_submission",
+			providerSessionId: input.providerSessionId,
+			instructionId: input.instructionId,
+			instructionSource: input.source,
+			delivery: receipt.delivery,
+			status: receipt.status,
+		});
 	}
 
 	private traceRejectedToolCall(call: VoiceToolCallRecord, mode: RealtimeInteractionModeId): void {
-		this.debugTraces.recorderFor(call.providerSessionId)?.write({ source: "service", direction: "tool_call_rejected", providerSessionId: call.providerSessionId, voiceToolCallId: call.voiceToolCallId, toolName: call.name, interactionMode: mode });
+		this.debugTraces.recorderFor(call.providerSessionId)?.write({
+			source: "service",
+			direction: "tool_call_rejected",
+			providerSessionId: call.providerSessionId,
+			voiceToolCallId: call.voiceToolCallId,
+			toolName: call.name,
+			interactionMode: mode,
+		});
 	}
 
 	private notifyProviderEvent(event: NormalizedProviderEvent): void {
@@ -458,8 +724,22 @@ class RealtimeService implements Service {
 	}
 
 	private async executeDirectTool(call: VoiceToolCallRecord): Promise<void> {
-		const resultText = await executeVoiceTool({ call, ctx: this.currentCtx, state: this.store.state(), controlPlane: this.controlPlane });
-		await this.recordToolResult({ voiceToolCallId: call.voiceToolCallId, providerSessionId: call.providerSessionId, status: "sent", resultText, at: Date.now() }, responsePolicyForTool(call));
+		const resultText = await executeVoiceTool({
+			call,
+			ctx: this.currentCtx,
+			state: this.store.state(),
+			controlPlane: this.controlPlane,
+		});
+		await this.recordToolResult(
+			{
+				voiceToolCallId: call.voiceToolCallId,
+				providerSessionId: call.providerSessionId,
+				status: "sent",
+				resultText,
+				at: Date.now(),
+			},
+			responsePolicyForTool(call),
+		);
 	}
 
 	private requireFakeAdapter(providerSessionId: ProviderSessionId): FakeRealtimeProviderAdapter {
@@ -476,12 +756,19 @@ function chunkRequest(input: RealtimeContextPushInput, chunk: SpeechChunk): Real
 		source: input.source,
 		kind: input.kind,
 		summary: input.summary,
-		chunk: chunk.count > 1 ? { index: chunk.index, count: chunk.count, originalTextLength: chunk.originalTextLength } : undefined,
+		chunk:
+			chunk.count > 1
+				? { index: chunk.index, count: chunk.count, originalTextLength: chunk.originalTextLength }
+				: undefined,
 		rendering: { mode: chunk.renderingMode, envelope: chunk.envelope },
 	};
 }
 
-function renderChunkedPushResult(providerSessionId: ProviderSessionId, chunks: readonly SpeechChunk[], message: string): string {
+function renderChunkedPushResult(
+	providerSessionId: ProviderSessionId,
+	chunks: readonly SpeechChunk[],
+	message: string,
+): string {
 	if (chunks.length === 1) return `${message} (${providerSessionId}).`;
 	return `Realtime backend update queued as ${chunks.length} speech chunks (${providerSessionId}).`;
 }

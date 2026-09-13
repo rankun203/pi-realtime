@@ -30,9 +30,28 @@ class FfplayAudioPlayback implements AudioPlaybackController {
 	async start(onError?: (error: Error) => void): Promise<void> {
 		if (this.proc) return;
 		this.stopping = false;
-		const proc = spawn("ffplay", ["-hide_banner", "-loglevel", "warning", "-nodisp", "-autoexit", "-f", "s16le", "-ar", String(PCM_SAMPLE_RATE), "-ch_layout", PCM_CHANNELS === 1 ? "mono" : "stereo", "-"], { stdio: ["pipe", "ignore", "pipe"] });
+		const proc = spawn(
+			"ffplay",
+			[
+				"-hide_banner",
+				"-loglevel",
+				"warning",
+				"-nodisp",
+				"-autoexit",
+				"-f",
+				"s16le",
+				"-ar",
+				String(PCM_SAMPLE_RATE),
+				"-ch_layout",
+				PCM_CHANNELS === 1 ? "mono" : "stereo",
+				"-",
+			],
+			{ stdio: ["pipe", "ignore", "pipe"] },
+		);
 		this.proc = proc;
-		proc.stderr?.on("data", (data: Buffer) => { this.stderr = `${this.stderr}${data.toString()}`.slice(-4000); });
+		proc.stderr?.on("data", (data: Buffer) => {
+			this.stderr = `${this.stderr}${data.toString()}`.slice(-4000);
+		});
 		proc.on("error", (error) => {
 			this.proc = undefined;
 			this.stopping = false;
@@ -42,7 +61,8 @@ class FfplayAudioPlayback implements AudioPlaybackController {
 			const wasStopping = this.stopping;
 			this.proc = undefined;
 			this.stopping = false;
-			if (!wasStopping && code && !signal) onError?.(new Error(`ffplay audio playback exited with code ${code}: ${this.stderr.trim()}`));
+			if (!wasStopping && code && !signal)
+				onError?.(new Error(`ffplay audio playback exited with code ${code}: ${this.stderr.trim()}`));
 		});
 	}
 
@@ -57,8 +77,14 @@ class FfplayAudioPlayback implements AudioPlaybackController {
 		this.stopping = true;
 		proc.stdin?.end();
 		await new Promise<void>((resolve) => {
-			const timer = setTimeout(() => { proc.kill("SIGKILL"); resolve(); }, STOP_KILL_GRACE_MS);
-			proc.once("exit", () => { clearTimeout(timer); resolve(); });
+			const timer = setTimeout(() => {
+				proc.kill("SIGKILL");
+				resolve();
+			}, STOP_KILL_GRACE_MS);
+			proc.once("exit", () => {
+				clearTimeout(timer);
+				resolve();
+			});
 		});
 		this.proc = undefined;
 		this.stopping = false;

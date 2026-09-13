@@ -1,9 +1,31 @@
 import { createHash } from "node:crypto";
 import type { DebugTraceRecorder } from "../../debug-trace";
-import type { ContextPacket, DisconnectReason, NormalizedProviderEvent, ProviderDeliveryReceipt, ProviderInteractionConfig, ProviderKind, ProviderSessionId, VoiceToolResultRecord, VoiceToolSurface } from "../../types";
-import type { ProviderConnectConfig, ProviderEventSink, RealtimeProviderAdapter, RealtimeContextPushRequest, ToolResultResponsePolicy, VoiceResponseRequest } from "../types";
+import type {
+	ContextPacket,
+	DisconnectReason,
+	NormalizedProviderEvent,
+	ProviderDeliveryReceipt,
+	ProviderInteractionConfig,
+	ProviderKind,
+	ProviderSessionId,
+	VoiceToolResultRecord,
+	VoiceToolSurface,
+} from "../../types";
+import type {
+	ProviderConnectConfig,
+	ProviderEventSink,
+	RealtimeProviderAdapter,
+	RealtimeContextPushRequest,
+	ToolResultResponsePolicy,
+	VoiceResponseRequest,
+} from "../types";
 import type { WebRTCHelperServer } from "../../media/webrtc-helper/protocol";
-import { backendUpdateItemEvent, backendUpdateResponseEvent, backendUpdateResponseShape, responseCreateEvent } from "./responses";
+import {
+	backendUpdateItemEvent,
+	backendUpdateResponseEvent,
+	backendUpdateResponseShape,
+	responseCreateEvent,
+} from "./responses";
 import { usageFromOpenAIInputTranscription, usageFromOpenAIResponseDone } from "./usage";
 import { renderContextPacket } from "./shared";
 
@@ -15,26 +37,51 @@ export class OpenAIWebRTCBridgeAdapter implements RealtimeProviderAdapter {
 	private orderedPushChain: Promise<void> = Promise.resolve();
 	private pendingChunkCompletion: PendingChunkCompletion | undefined;
 
-	constructor(readonly providerSessionId: ProviderSessionId, private readonly helper: WebRTCHelperServer, private readonly createClientSecret: () => Promise<unknown>, private readonly trace?: DebugTraceRecorder) {}
+	constructor(
+		readonly providerSessionId: ProviderSessionId,
+		private readonly helper: WebRTCHelperServer,
+		private readonly createClientSecret: () => Promise<unknown>,
+		private readonly trace?: DebugTraceRecorder,
+	) {}
 
 	async connect(config: ProviderConnectConfig, sink: ProviderEventSink): Promise<void> {
 		this.sink = sink;
 		this.interaction = config.interaction;
-		this.helper.registerSession({
-			provider: config.provider,
-			providerSessionId: config.providerSessionId,
-			model: config.model,
-			instructions: config.systemPrompt,
-			toolSurface: config.toolSurface,
-			initialContext: config.initialContext,
-			interaction: config.interaction,
-			createClientSecret: this.createClientSecret,
-			trace: this.trace,
-			normalizeUsageEvent: (input) => input.source === "response"
-				? usageFromOpenAIResponseDone(input.realtimeEvent, { providerSessionId: this.providerSessionId, model: config.model, providerEventId: input.providerEventId, at: input.at })
-				: usageFromOpenAIInputTranscription(input.realtimeEvent, { providerSessionId: this.providerSessionId, model: config.model, providerEventId: input.providerEventId, at: input.at }),
-		}, { onProviderEvent: (event) => this.handleProviderEvent(event) });
-		sink.onProviderEvent({ type: "connected", provider: "openai", providerSessionId: this.providerSessionId, localSeq: Date.now(), at: Date.now() });
+		this.helper.registerSession(
+			{
+				provider: config.provider,
+				providerSessionId: config.providerSessionId,
+				model: config.model,
+				instructions: config.systemPrompt,
+				toolSurface: config.toolSurface,
+				initialContext: config.initialContext,
+				interaction: config.interaction,
+				createClientSecret: this.createClientSecret,
+				trace: this.trace,
+				normalizeUsageEvent: (input) =>
+					input.source === "response"
+						? usageFromOpenAIResponseDone(input.realtimeEvent, {
+								providerSessionId: this.providerSessionId,
+								model: config.model,
+								providerEventId: input.providerEventId,
+								at: input.at,
+							})
+						: usageFromOpenAIInputTranscription(input.realtimeEvent, {
+								providerSessionId: this.providerSessionId,
+								model: config.model,
+								providerEventId: input.providerEventId,
+								at: input.at,
+							}),
+			},
+			{ onProviderEvent: (event) => this.handleProviderEvent(event) },
+		);
+		sink.onProviderEvent({
+			type: "connected",
+			provider: "openai",
+			providerSessionId: this.providerSessionId,
+			localSeq: Date.now(),
+			at: Date.now(),
+		});
 	}
 
 	async disconnect(reason: DisconnectReason): Promise<void> {
@@ -44,7 +91,10 @@ export class OpenAIWebRTCBridgeAdapter implements RealtimeProviderAdapter {
 	}
 
 	async updateContext(packet: ContextPacket): Promise<ProviderDeliveryReceipt> {
-		this.enqueue({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: renderContextPacket(packet) }] } });
+		this.enqueue({
+			type: "conversation.item.create",
+			item: { type: "message", role: "system", content: [{ type: "input_text", text: renderContextPacket(packet) }] },
+		});
 		return { status: "delivered", message: "context queued for WebRTC helper" };
 	}
 
@@ -53,19 +103,33 @@ export class OpenAIWebRTCBridgeAdapter implements RealtimeProviderAdapter {
 	}
 
 	async sendToolResult(result: VoiceToolResultRecord, policy: ToolResultResponsePolicy = "none"): Promise<void> {
-		this.enqueue({ type: "conversation.item.create", item: { type: "function_call_output", call_id: result.voiceToolCallId, output: result.resultText } });
+		this.enqueue({
+			type: "conversation.item.create",
+			item: { type: "function_call_output", call_id: result.voiceToolCallId, output: result.resultText },
+		});
 		if (policy === "none") {
-			this.trace?.write({ source: "provider_adapter", direction: "response_create_suppressed", reason: "tool_result_suppressed", voiceToolCallId: result.voiceToolCallId });
+			this.trace?.write({
+				source: "provider_adapter",
+				direction: "response_create_suppressed",
+				reason: "tool_result_suppressed",
+				voiceToolCallId: result.voiceToolCallId,
+			});
 			return;
 		}
 		await this.requestResponse({ reason: policy === "final_ack" ? "tool_result_final_ack" : "tool_result_continue" });
 	}
 
 	async pushContext(input: RealtimeContextPushRequest): Promise<ProviderDeliveryReceipt> {
-		if (this.helper.isCompanion?.(this.providerSessionId)) return { status: "skipped", message: "The voice companion observes your normal visible output and chooses its own speech. Write a normal response instead of using realtime_send_* tools." };
+		if (this.helper.isCompanion?.(this.providerSessionId))
+			return {
+				status: "skipped",
+				message:
+					"The voice companion observes your normal visible output and chooses its own speech. Write a normal response instead of using realtime_send_* tools.",
+			};
 		const interaction = this.requireInteraction();
 		const wantsResponse = input.mode === "request_spoken_response";
-		if (!wantsResponse || interaction.backendSpeechContext !== "isolated_update") this.enqueue(realtimeClientEventRecord(backendUpdateItemEvent(input)));
+		if (!wantsResponse || interaction.backendSpeechContext !== "isolated_update")
+			this.enqueue(realtimeClientEventRecord(backendUpdateItemEvent(input)));
 		this.trace?.write({
 			source: "provider_adapter",
 			direction: wantsResponse ? "context_push_response_requested" : "context_push_context_only",
@@ -83,11 +147,19 @@ export class OpenAIWebRTCBridgeAdapter implements RealtimeProviderAdapter {
 			originalTextLength: input.chunk?.originalTextLength ?? input.text.length,
 		});
 		if (wantsResponse) this.enqueueOrderedBackendUpdateResponse(input, interaction);
-		return { status: "delivered", message: wantsResponse ? "backend update queued and spoken response requested" : "backend update queued without response" };
+		return {
+			status: "delivered",
+			message: wantsResponse
+				? "backend update queued and spoken response requested"
+				: "backend update queued without response",
+		};
 	}
 
 	async sendTextInput(text: string): Promise<ProviderDeliveryReceipt> {
-		this.enqueue({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text }] } });
+		this.enqueue({
+			type: "conversation.item.create",
+			item: { type: "message", role: "user", content: [{ type: "input_text", text }] },
+		});
 		await this.requestResponse({ reason: "manual" });
 		return { status: "delivered", message: "text queued for WebRTC helper" };
 	}
@@ -110,20 +182,41 @@ export class OpenAIWebRTCBridgeAdapter implements RealtimeProviderAdapter {
 		this.sink?.onProviderEvent(event);
 	}
 
-	private enqueueOrderedBackendUpdateResponse(input: RealtimeContextPushRequest, interaction: ProviderInteractionConfig): void {
+	private enqueueOrderedBackendUpdateResponse(
+		input: RealtimeContextPushRequest,
+		interaction: ProviderInteractionConfig,
+	): void {
 		this.orderedPushChain = this.orderedPushChain
-			.catch((error: unknown) => this.trace?.write({ source: "provider_adapter", direction: "ordered_chunk_dispatch_recovered", message: errorMessage(error) }))
+			.catch((error: unknown) =>
+				this.trace?.write({
+					source: "provider_adapter",
+					direction: "ordered_chunk_dispatch_recovered",
+					message: errorMessage(error),
+				}),
+			)
 			.then(() => this.dispatchOrderedBackendUpdateResponse(input, interaction));
 	}
 
-	private async dispatchOrderedBackendUpdateResponse(input: RealtimeContextPushRequest, interaction: ProviderInteractionConfig): Promise<void> {
-		this.trace?.write({ source: "provider_adapter", direction: "ordered_chunk_dispatch_start", chunkIndex: input.chunk?.index, chunkCount: input.chunk?.count, originalTextLength: input.chunk?.originalTextLength });
+	private async dispatchOrderedBackendUpdateResponse(
+		input: RealtimeContextPushRequest,
+		interaction: ProviderInteractionConfig,
+	): Promise<void> {
+		this.trace?.write({
+			source: "provider_adapter",
+			direction: "ordered_chunk_dispatch_start",
+			chunkIndex: input.chunk?.index,
+			chunkCount: input.chunk?.count,
+			originalTextLength: input.chunk?.originalTextLength,
+		});
 		const completion = this.waitForChunkResponseDone(input);
 		this.enqueueBackendUpdateResponse(input, interaction);
 		await completion;
 	}
 
-	private enqueueBackendUpdateResponse(input: RealtimeContextPushRequest, interaction: ProviderInteractionConfig): void {
+	private enqueueBackendUpdateResponse(
+		input: RealtimeContextPushRequest,
+		interaction: ProviderInteractionConfig,
+	): void {
 		this.traceBackendUpdateResponseCreate(input, interaction);
 		this.enqueue(realtimeClientEventRecord(backendUpdateResponseEvent(input, interaction, ["audio"])));
 	}
@@ -131,7 +224,13 @@ export class OpenAIWebRTCBridgeAdapter implements RealtimeProviderAdapter {
 	private waitForChunkResponseDone(input: RealtimeContextPushRequest): Promise<void> {
 		return new Promise((resolve) => {
 			const timeout = setTimeout(() => {
-				this.trace?.write({ source: "provider_adapter", direction: "ordered_chunk_dispatch_timeout", chunkIndex: input.chunk?.index, chunkCount: input.chunk?.count, originalTextLength: input.chunk?.originalTextLength });
+				this.trace?.write({
+					source: "provider_adapter",
+					direction: "ordered_chunk_dispatch_timeout",
+					chunkIndex: input.chunk?.index,
+					chunkCount: input.chunk?.count,
+					originalTextLength: input.chunk?.originalTextLength,
+				});
 				this.resolvePendingChunkCompletion("timeout");
 			}, 60_000);
 			this.pendingChunkCompletion = { chunk: input.chunk, resolve, timeout };
@@ -148,11 +247,22 @@ export class OpenAIWebRTCBridgeAdapter implements RealtimeProviderAdapter {
 		if (!pending) return;
 		clearTimeout(pending.timeout);
 		this.pendingChunkCompletion = undefined;
-		this.trace?.write({ source: "provider_adapter", direction: "ordered_chunk_dispatch_done", reason, responseId, chunkIndex: pending.chunk?.index, chunkCount: pending.chunk?.count, originalTextLength: pending.chunk?.originalTextLength });
+		this.trace?.write({
+			source: "provider_adapter",
+			direction: "ordered_chunk_dispatch_done",
+			reason,
+			responseId,
+			chunkIndex: pending.chunk?.index,
+			chunkCount: pending.chunk?.count,
+			originalTextLength: pending.chunk?.originalTextLength,
+		});
 		pending.resolve();
 	}
 
-	private traceBackendUpdateResponseCreate(input: RealtimeContextPushRequest, interaction: ProviderInteractionConfig): void {
+	private traceBackendUpdateResponseCreate(
+		input: RealtimeContextPushRequest,
+		interaction: ProviderInteractionConfig,
+	): void {
 		const shape = backendUpdateResponseShape(input, interaction);
 		this.trace?.write({
 			source: "provider_adapter",
@@ -186,7 +296,12 @@ export class OpenAIWebRTCBridgeAdapter implements RealtimeProviderAdapter {
 	}
 }
 
-export function createOpenAIWebRTCBridgeAdapter(providerSessionId: ProviderSessionId, helper: WebRTCHelperServer, createClientSecret: () => Promise<unknown>, trace?: DebugTraceRecorder): OpenAIWebRTCBridgeAdapter {
+export function createOpenAIWebRTCBridgeAdapter(
+	providerSessionId: ProviderSessionId,
+	helper: WebRTCHelperServer,
+	createClientSecret: () => Promise<unknown>,
+	trace?: DebugTraceRecorder,
+): OpenAIWebRTCBridgeAdapter {
 	return new OpenAIWebRTCBridgeAdapter(providerSessionId, helper, createClientSecret, trace);
 }
 
@@ -213,4 +328,3 @@ function preview(text: string): string {
 function errorMessage(error: unknown): string {
 	return error instanceof Error ? error.message : String(error);
 }
-

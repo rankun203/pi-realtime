@@ -10,7 +10,7 @@ const audioManager = readFileSync(".pi/extensions/pi-realtime/audio-manager.ts",
 const commands = readFileSync(".pi/extensions/pi-realtime/commands.ts", "utf8");
 const providerTypes = readFileSync(".pi/extensions/pi-realtime/providers/types.ts", "utf8");
 
-assert.match(audio, /spawn\("ffmpeg"/);
+assert.match(audio, /spawn\(\s*"ffmpeg"/);
 assert.match(audio, /avfoundation/);
 assert.match(audio, /24_000/);
 assert.match(audio, /s16le/);
@@ -21,7 +21,10 @@ assert.doesNotMatch(audio, /throw error/);
 assert.match(providerTypes, /sendAudioInput\(audio: Buffer\)/);
 assert.match(openai, /input_audio_buffer\.append/);
 assert.match(openai, /audio\.toString\("base64"\)/);
-assert.match(openai, /buildOpenAIRealtimeAudioConfig\(\{ \.\.\.openAIRealtimeAudioInput\(interaction\), includeRawPcmFormat: true, includeRawPcmOutputFormat: true \}\)/);
+assert.match(
+	openai,
+	/buildOpenAIRealtimeAudioConfig\(\{\s*\.\.\.openAIRealtimeAudioInput\(interaction\),\s*includeRawPcmFormat: true,\s*includeRawPcmOutputFormat: true,?\s*\}\)/,
+);
 assert.match(sessionConfig, /format: \{ type: "audio\/pcm", rate: 24000 \}/);
 assert.match(sessionConfig, /DEFAULT_VAD_MODE: OpenAIVadMode = "server"/);
 assert.match(sessionConfig, /type: "server_vad"/);

@@ -5,7 +5,7 @@ const PCM_CHANNELS = 1;
 const PCM_BYTES_PER_SAMPLE = 2;
 const CHUNK_MS = 100;
 const STOP_KILL_GRACE_MS = 1500;
-const CHUNK_BYTES = PCM_SAMPLE_RATE * PCM_CHANNELS * PCM_BYTES_PER_SAMPLE * CHUNK_MS / 1000;
+const CHUNK_BYTES = (PCM_SAMPLE_RATE * PCM_CHANNELS * PCM_BYTES_PER_SAMPLE * CHUNK_MS) / 1000;
 
 export type AudioCaptureStatus = "idle" | "running" | "stopping";
 
@@ -36,17 +36,40 @@ class MacOSFfmpegAudioCapture implements AudioCaptureController {
 		if (this.proc) throw new Error("Microphone capture is already running.");
 		this.stopping = false;
 		let buffer = Buffer.alloc(0);
-		const proc = spawn("ffmpeg", ["-hide_banner", "-loglevel", "warning", "-f", "avfoundation", "-i", this.inputDevice, "-ac", "1", "-ar", String(PCM_SAMPLE_RATE), "-f", "s16le", "-"], { stdio: ["ignore", "pipe", "pipe"] });
+		const proc = spawn(
+			"ffmpeg",
+			[
+				"-hide_banner",
+				"-loglevel",
+				"warning",
+				"-f",
+				"avfoundation",
+				"-i",
+				this.inputDevice,
+				"-ac",
+				"1",
+				"-ar",
+				String(PCM_SAMPLE_RATE),
+				"-f",
+				"s16le",
+				"-",
+			],
+			{ stdio: ["ignore", "pipe", "pipe"] },
+		);
 		this.proc = proc;
 		proc.stdout?.on("data", (data: Buffer) => {
 			buffer = Buffer.concat([buffer, data]);
 			while (buffer.length >= CHUNK_BYTES) {
 				const chunk = buffer.subarray(0, CHUNK_BYTES);
 				buffer = buffer.subarray(CHUNK_BYTES);
-				this.queue = this.queue.then(() => onChunk(Buffer.from(chunk))).catch((error: unknown) => onError?.(error instanceof Error ? error : new Error(String(error))));
+				this.queue = this.queue
+					.then(() => onChunk(Buffer.from(chunk)))
+					.catch((error: unknown) => onError?.(error instanceof Error ? error : new Error(String(error))));
 			}
 		});
-		proc.stderr?.on("data", (data: Buffer) => { this.stderr = `${this.stderr}${data.toString()}`.slice(-4000); });
+		proc.stderr?.on("data", (data: Buffer) => {
+			this.stderr = `${this.stderr}${data.toString()}`.slice(-4000);
+		});
 		proc.on("error", (error) => {
 			this.proc = undefined;
 			this.stopping = false;
@@ -56,7 +79,8 @@ class MacOSFfmpegAudioCapture implements AudioCaptureController {
 			const wasStopping = this.stopping;
 			this.proc = undefined;
 			this.stopping = false;
-			if (!wasStopping && code && !signal) onError?.(new Error(`ffmpeg microphone capture exited with code ${code}: ${this.stderr.trim()}`));
+			if (!wasStopping && code && !signal)
+				onError?.(new Error(`ffmpeg microphone capture exited with code ${code}: ${this.stderr.trim()}`));
 		});
 	}
 
@@ -65,8 +89,14 @@ class MacOSFfmpegAudioCapture implements AudioCaptureController {
 		if (!proc) return;
 		this.stopping = true;
 		await new Promise<void>((resolve) => {
-			const timer = setTimeout(() => { proc.kill("SIGKILL"); resolve(); }, STOP_KILL_GRACE_MS);
-			proc.once("exit", () => { clearTimeout(timer); resolve(); });
+			const timer = setTimeout(() => {
+				proc.kill("SIGKILL");
+				resolve();
+			}, STOP_KILL_GRACE_MS);
+			proc.once("exit", () => {
+				clearTimeout(timer);
+				resolve();
+			});
 			proc.kill("SIGTERM");
 		});
 		this.proc = undefined;

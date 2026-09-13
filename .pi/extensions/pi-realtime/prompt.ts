@@ -18,7 +18,10 @@ Available tool:
 ${surface.tools.map((tool) => `- ${tool.name}: ${tool.description}`).join("\n")}`;
 }
 
-export function voiceSpeechRendererPrompt(_surface: VoiceToolSurface, mode: BackendUpdateSpeechRendererSystemPromptMode = "strict_verbatim"): string {
+export function voiceSpeechRendererPrompt(
+	_surface: VoiceToolSurface,
+	mode: BackendUpdateSpeechRendererSystemPromptMode = "strict_verbatim",
+): string {
 	return mode === "per_response_rendering" ? perResponseSpeechRendererPrompt() : strictVerbatimSpeechRendererPrompt();
 }
 
@@ -59,7 +62,13 @@ export function defaultVoiceToolSurface(): VoiceToolSurface {
 	return {
 		revision: 2,
 		tools: [
-			{ name: "request", description: "Invoke Pi to perform a task or answer a substantive question. Include the user's goal, constraints, urgency, and relevant context. Pi handles coding, research, project design, configuration, status, history, logs, and factual questions.", direct: true, readOnly: false },
+			{
+				name: "request",
+				description:
+					"Invoke Pi to perform a task or answer a substantive question. Include the user's goal, constraints, urgency, and relevant context. Pi handles coding, research, project design, configuration, status, history, logs, and factual questions.",
+				direct: true,
+				readOnly: false,
+			},
 		],
 	};
 }

@@ -30,7 +30,10 @@ export type OutboxPollTraceState = {
 	emptySinceAt?: number;
 };
 
-export function createDebugTraceRecorder(providerSessionId: ProviderSessionId, createdAt = Date.now()): DebugTraceRecorder {
+export function createDebugTraceRecorder(
+	providerSessionId: ProviderSessionId,
+	createdAt = Date.now(),
+): DebugTraceRecorder {
 	const dir = join(tmpdir(), "pi-realtime-traces");
 	mkdirSync(dir, { recursive: true });
 	const path = join(dir, `${safeSegment(providerSessionId)}-${createdAt}.jsonl`);
@@ -48,15 +51,27 @@ export function createDebugTraceRegistry(): DebugTraceRegistry {
 	return {
 		create(providerSessionId) {
 			const recorder = createDebugTraceRecorder(providerSessionId);
-			traces.set(providerSessionId, { providerSessionId, recorder, path: recorder.path, createdAt: recorder.createdAt });
+			traces.set(providerSessionId, {
+				providerSessionId,
+				recorder,
+				path: recorder.path,
+				createdAt: recorder.createdAt,
+			});
 			return recorder;
 		},
 		recorderFor(providerSessionId) {
 			return traces.get(providerSessionId)?.recorder;
 		},
 		render(state, providerSessionId) {
-			const entries = (providerSessionId ? [...traces.values()].filter((trace) => trace.providerSessionId === providerSessionId) : [...traces.values()]).sort((a, b) => b.createdAt - a.createdAt);
-			if (entries.length === 0) return providerSessionId ? `No realtime debug trace recorded for ${providerSessionId}.` : "No realtime debug traces recorded yet.";
+			const entries = (
+				providerSessionId
+					? [...traces.values()].filter((trace) => trace.providerSessionId === providerSessionId)
+					: [...traces.values()]
+			).sort((a, b) => b.createdAt - a.createdAt);
+			if (entries.length === 0)
+				return providerSessionId
+					? `No realtime debug trace recorded for ${providerSessionId}.`
+					: "No realtime debug traces recorded yet.";
 			return ["realtime debug traces:", ...entries.map((trace) => renderTraceRow(trace, state))].join("\n");
 		},
 	};
@@ -66,7 +81,12 @@ export function createOutboxPollTraceState(): OutboxPollTraceState {
 	return { emptyCount: 0 };
 }
 
-export function nextOutboxPollTrace(state: OutboxPollTraceState, after: number, returnedIds: readonly number[], now = Date.now()): Record<string, unknown> | undefined {
+export function nextOutboxPollTrace(
+	state: OutboxPollTraceState,
+	after: number,
+	returnedIds: readonly number[],
+	now = Date.now(),
+): Record<string, unknown> | undefined {
 	if (returnedIds.length > 0) {
 		const emptyPollsBeforeResult = state.emptyCount;
 		const emptySinceAt = state.emptySinceAt;
@@ -77,7 +97,13 @@ export function nextOutboxPollTrace(state: OutboxPollTraceState, after: number, 
 	state.emptySinceAt ??= now;
 	state.emptyCount += 1;
 	if (state.emptyCount !== 1 && state.emptyCount % EMPTY_POLL_TRACE_INTERVAL !== 0) return undefined;
-	return { direction: "outbox_poll_idle", after, emptyPolls: state.emptyCount, emptySinceAt: state.emptySinceAt, lastAt: now };
+	return {
+		direction: "outbox_poll_idle",
+		after,
+		emptyPolls: state.emptyCount,
+		emptySinceAt: state.emptySinceAt,
+		lastAt: now,
+	};
 }
 
 export function describeRealtimePayload(value: unknown): Record<string, unknown> {
@@ -93,7 +119,11 @@ export function describeRealtimePayload(value: unknown): Record<string, unknown>
 }
 
 export function describeProviderEvent(event: NormalizedProviderEvent): Record<string, unknown> {
-	const description: Record<string, unknown> = { eventType: event.type, providerEventId: event.providerEventId, localSeq: event.localSeq };
+	const description: Record<string, unknown> = {
+		eventType: event.type,
+		providerEventId: event.providerEventId,
+		localSeq: event.localSeq,
+	};
 	if (event.type === "user_transcript" || event.type === "assistant_transcript") {
 		description.final = event.final;
 		addTextDetails(description, "transcript", event.text);
@@ -182,7 +212,9 @@ function textParts(part: unknown): string[] {
 function contentTypes(value: Record<string, unknown>): string[] | undefined {
 	const item = isRecord(value.item) ? value.item : undefined;
 	const content = Array.isArray(item?.content) ? item.content : undefined;
-	return content?.map((part) => isRecord(part) ? stringValue(part.type) : undefined).filter((type): type is string => Boolean(type));
+	return content
+		?.map((part) => (isRecord(part) ? stringValue(part.type) : undefined))
+		.filter((type): type is string => Boolean(type));
 }
 
 function idFrom(value: unknown): string | undefined {

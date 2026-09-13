@@ -10,7 +10,7 @@ const audioManager = readFileSync(".pi/extensions/pi-realtime/audio-manager.ts",
 const commands = readFileSync(".pi/extensions/pi-realtime/commands.ts", "utf8");
 const providerTypes = readFileSync(".pi/extensions/pi-realtime/providers/types.ts", "utf8");
 
-assert.match(playback, /spawn\("ffplay"/);
+assert.match(playback, /spawn\(\s*"ffplay"/);
 assert.match(playback, /s16le/);
 assert.match(playback, /24_000/);
 assert.match(playback, /ch_layout/);

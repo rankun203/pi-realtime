@@ -3,7 +3,11 @@ import { homedir } from "node:os";
 import { resolve } from "node:path";
 
 /** Resolve extension-local settings without changing process.env. Read per connection. */
-export function loadRealtimeEnv(env: NodeJS.ProcessEnv = process.env, cwd = process.cwd(), home = homedir()): NodeJS.ProcessEnv {
+export function loadRealtimeEnv(
+	env: NodeJS.ProcessEnv = process.env,
+	cwd = process.cwd(),
+	home = homedir(),
+): NodeJS.ProcessEnv {
 	const configuredDir = env.PI_CODING_AGENT_DIR?.replace(/^~(?=\/|$)/, home);
 	const settingsPath = resolve(configuredDir || resolve(home, ".pi", "agent"), "settings.json");
 	return {
@@ -20,7 +24,8 @@ export function loadRealtimeWebPort(env: NodeJS.ProcessEnv = process.env): numbe
 	if (value === undefined) return 0;
 	if (!/^\d+$/.test(value)) throw new Error("PI_REALTIME_WEB_PORT must be an integer from 0 to 65535.");
 	const port = Number(value);
-	if (!Number.isSafeInteger(port) || port > 65535) throw new Error("PI_REALTIME_WEB_PORT must be an integer from 0 to 65535.");
+	if (!Number.isSafeInteger(port) || port > 65535)
+		throw new Error("PI_REALTIME_WEB_PORT must be an integer from 0 to 65535.");
 	return port;
 }
 
@@ -65,17 +70,24 @@ function readRealtimeSettings(path: string): NodeJS.ProcessEnv {
 		if (!isRecord(extension.web)) throw new Error(`pi-realtime.web must be an object in ${path}.`);
 		const port = extension.web.port;
 		if (port !== undefined) {
-			if (typeof port !== "number" || !Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`pi-realtime.web.port must be an integer from 0 to 65535 in ${path}.`);
+			if (typeof port !== "number" || !Number.isInteger(port) || port < 0 || port > 65535)
+				throw new Error(`pi-realtime.web.port must be an integer from 0 to 65535 in ${path}.`);
 			values.PI_REALTIME_WEB_PORT = String(port);
 		}
 	}
 	const openai = extension.openai;
 	if (openai === undefined) return values;
 	if (!isRecord(openai)) throw new Error(`pi-realtime.openai must be an object in ${path}.`);
-	for (const [field, variable] of Object.entries({ baseUrl: "OPENAI_BASE_URL", authMode: "OPENAI_AUTH_MODE", model: "OPENAI_REALTIME_MODEL", transcriptionModel: "OPENAI_REALTIME_TRANSCRIPTION_MODEL" })) {
+	for (const [field, variable] of Object.entries({
+		baseUrl: "OPENAI_BASE_URL",
+		authMode: "OPENAI_AUTH_MODE",
+		model: "OPENAI_REALTIME_MODEL",
+		transcriptionModel: "OPENAI_REALTIME_TRANSCRIPTION_MODEL",
+	})) {
 		const value = openai[field];
 		if (value === undefined) continue;
-		if (typeof value !== "string" || !value.trim()) throw new Error(`pi-realtime.openai.${field} must be a non-empty string in ${path}.`);
+		if (typeof value !== "string" || !value.trim())
+			throw new Error(`pi-realtime.openai.${field} must be a non-empty string in ${path}.`);
 		values[variable] = value.trim();
 	}
 	return values;
@@ -106,7 +118,8 @@ function parseEnvLine(line: string): [string, string] | undefined {
 
 function unquote(value: string): string {
 	const trimmed = value.trim();
-	if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'"))) return trimmed.slice(1, -1);
+	if ((trimmed.startsWith('"') && trimmed.endsWith('"')) || (trimmed.startsWith("'") && trimmed.endsWith("'")))
+		return trimmed.slice(1, -1);
 	const commentIndex = trimmed.indexOf(" #");
 	return (commentIndex >= 0 ? trimmed.slice(0, commentIndex) : trimmed).trim();
 }

@@ -32,23 +32,59 @@ assert.match(controlPlaneSource, /pi\.sendMessage/);
 assert.match(controlPlaneSource, /REALTIME_REQUEST_MESSAGE_TYPE/);
 
 class FakeHarness {
-  constructor(id) { this.id = id; this.events = []; this.results = []; this.seq = 0; }
-  emit(type, data = {}) { this.events.push({ type, provider: "fake", providerSessionId: this.id, localSeq: ++this.seq, ...data }); }
-  connect() { this.emit("connected"); }
-  updateContext(packet) { this.emit("context_delivery", { packetId: packet.packetId, revision: packet.revision, status: "delivered" }); }
-  simulateToolCall(name, args) { const id = `call_${this.seq + 1}`; this.emit("tool_call", { call: { voiceToolCallId: id, providerSessionId: this.id, provider: "fake", name, arguments: args, status: "pending" } }); return id; }
-  sendToolResult(result) { this.results.push(result); }
-  disconnect() { this.emit("disconnected", { reason: "shutdown" }); }
+	constructor(id) {
+		this.id = id;
+		this.events = [];
+		this.results = [];
+		this.seq = 0;
+	}
+	emit(type, data = {}) {
+		this.events.push({ type, provider: "fake", providerSessionId: this.id, localSeq: ++this.seq, ...data });
+	}
+	connect() {
+		this.emit("connected");
+	}
+	updateContext(packet) {
+		this.emit("context_delivery", { packetId: packet.packetId, revision: packet.revision, status: "delivered" });
+	}
+	simulateToolCall(name, args) {
+		const id = `call_${this.seq + 1}`;
+		this.emit("tool_call", {
+			call: {
+				voiceToolCallId: id,
+				providerSessionId: this.id,
+				provider: "fake",
+				name,
+				arguments: args,
+				status: "pending",
+			},
+		});
+		return id;
+	}
+	sendToolResult(result) {
+		this.results.push(result);
+	}
+	disconnect() {
+		this.emit("disconnected", { reason: "shutdown" });
+	}
 }
 
 const fake = new FakeHarness("fake_1");
 fake.connect();
 fake.updateContext({ packetId: "pkt_1", revision: 1 });
 const callId = fake.simulateToolCall("request", { request: "Run tests", citedCitationIds: ["cit_1"] });
-fake.sendToolResult({ voiceToolCallId: callId, providerSessionId: "fake_1", status: "sent", resultText: "Request submitted." });
+fake.sendToolResult({
+	voiceToolCallId: callId,
+	providerSessionId: "fake_1",
+	status: "sent",
+	resultText: "Request submitted.",
+});
 fake.disconnect();
 
-assert.deepEqual(fake.events.map((event) => event.type), ["connected", "context_delivery", "tool_call", "disconnected"]);
+assert.deepEqual(
+	fake.events.map((event) => event.type),
+	["connected", "context_delivery", "tool_call", "disconnected"],
+);
 assert.equal(fake.events[2].call.providerSessionId, "fake_1");
 assert.equal(fake.results[0].voiceToolCallId, callId);
 assert.equal(fake.results[0].providerSessionId, "fake_1");

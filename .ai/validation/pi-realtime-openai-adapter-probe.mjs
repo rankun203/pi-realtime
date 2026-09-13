@@ -34,10 +34,10 @@ assert.match(openai, /input_text/);
 assert.match(openai, /requestResponse/);
 assert.match(openaiRuntime, /hasOpenAIRealtimeCredentials\(\)/);
 assert.match(openaiRuntime, /createOpenAIRealtimeProvider/);
-assert.match(openaiRuntime, /defaultModel\(\) \{ return openAIConnectionConfig\(\)\.model; \}/);
+assert.match(openaiRuntime, /defaultModel\(\) \{\s*return openAIConnectionConfig\(\)\.model;\s*\}/);
 assert.match(openaiShared, /loadRealtimeEnv\(env\)/);
 assert.match(envSource, /resolve\(cwd, "\.env"\)/);
-assert.match(envSource, /Object\.fromEntries\(Object\.entries\(env\)/);
+assert.match(envSource, /Object\.fromEntries\(\s*Object\.entries\(env\)/);
 assert.match(envSource, /pi-realtime:openai/);
 assert.doesNotMatch(envSource, /env\[key\] = value/);
 assert.match(gitignore, /^\.env$/m);
@@ -49,21 +49,38 @@ assert.match(service, /sendTextInput\(providerSessionId/);
 assert.match(service, /Realtime \$\{event\.provider\}: \$\{event\.text\}/);
 assert.equal(pkg.dependencies?.openai?.startsWith("^6."), true);
 
-const allowed = new Set([join(".pi/extensions/pi-realtime/providers/openai/index.ts"), join(".pi/extensions/pi-realtime/providers/openai/shared.ts")]);
+const allowed = new Set([
+	join(".pi/extensions/pi-realtime/providers/openai/index.ts"),
+	join(".pi/extensions/pi-realtime/providers/openai/shared.ts"),
+]);
 for (const [file, source] of [
-  [".pi/extensions/pi-realtime/service.ts", service],
-  [".pi/extensions/pi-realtime/providers/openai/index.ts", openai],
-  [".pi/extensions/pi-realtime/providers/openai/shared.ts", readFileSync(".pi/extensions/pi-realtime/providers/openai/shared.ts", "utf8")],
-  [".pi/extensions/pi-realtime/providers/fake.ts", readFileSync(".pi/extensions/pi-realtime/providers/fake.ts", "utf8")],
+	[".pi/extensions/pi-realtime/service.ts", service],
+	[".pi/extensions/pi-realtime/providers/openai/index.ts", openai],
+	[
+		".pi/extensions/pi-realtime/providers/openai/shared.ts",
+		readFileSync(".pi/extensions/pi-realtime/providers/openai/shared.ts", "utf8"),
+	],
+	[
+		".pi/extensions/pi-realtime/providers/fake.ts",
+		readFileSync(".pi/extensions/pi-realtime/providers/fake.ts", "utf8"),
+	],
 ]) {
-  if (!allowed.has(file)) assert.doesNotMatch(source, /from "openai|openai\/realtime|openai\/resources/);
+	if (!allowed.has(file)) assert.doesNotMatch(source, /from "openai|openai\/realtime|openai\/resources/);
 }
 
-assert.match(openai, /\["request", "pi_state_snapshot", "pi_send_instruction"/);
+assert.match(openai, /\[\s*"request",\s*"pi_state_snapshot",\s*"pi_send_instruction"/);
 assert.match(openai, /: "request"/);
 function normalizeToolName(name) {
-  const allowed = ["request", "pi_state_snapshot", "pi_send_instruction", "pi_wait_for_update", "pi_realtime_status", "pinotator_citations_list", "pinotator_citation_resolve"];
-  return allowed.includes(name) ? name : "request";
+	const allowed = [
+		"request",
+		"pi_state_snapshot",
+		"pi_send_instruction",
+		"pi_wait_for_update",
+		"pi_realtime_status",
+		"pinotator_citations_list",
+		"pinotator_citation_resolve",
+	];
+	return allowed.includes(name) ? name : "request";
 }
 assert.equal(normalizeToolName("request"), "request");
 assert.equal(normalizeToolName("unknown_tool"), "request");

@@ -6,8 +6,15 @@ export const REALTIME_REQUEST_MESSAGE_TYPE = "pi-realtime.request";
 export const REALTIME_SESSION_MESSAGE_TYPE = "pi-realtime.session";
 
 export function registerRealtimeMessageRenderers(pi: ExtensionAPI): void {
-	pi.registerMessageRenderer(REALTIME_REQUEST_MESSAGE_TYPE, (message, _options, theme) => new Text(theme.fg("warning", `[realtime request] ${plainContent(message.content)}`), 0, 0));
-	pi.registerMessageRenderer(REALTIME_SESSION_MESSAGE_TYPE, (message, _options, theme) => new Text(theme.fg("warning", `[realtime] ${plainContent(message.content)}`), 0, 0));
+	pi.registerMessageRenderer(
+		REALTIME_REQUEST_MESSAGE_TYPE,
+		(message, _options, theme) =>
+			new Text(theme.fg("warning", `[realtime request] ${plainContent(message.content)}`), 0, 0),
+	);
+	pi.registerMessageRenderer(
+		REALTIME_SESSION_MESSAGE_TYPE,
+		(message, _options, theme) => new Text(theme.fg("warning", `[realtime] ${plainContent(message.content)}`), 0, 0),
+	);
 }
 
 export function renderRealtimeRequestMessage(input: VoiceInstructionInput): string {
@@ -23,7 +30,8 @@ export function renderRealtimeRequestMessage(input: VoiceInstructionInput): stri
 }
 
 export function renderRealtimeSessionMessage(session: VoiceSessionRecord, active: boolean): string {
-	if (active && session.interactionMode === "agent") return `Voice companion available for ${session.providerSessionId}. It observes ordinary visible Pi output and independently chooses what to say. Continue working normally; no acknowledgement or realtime_send_* tools are needed for companion messages. Voice lifecycle changes do not interrupt work.`;
+	if (active && session.interactionMode === "agent")
+		return `Voice companion available for ${session.providerSessionId}. It observes ordinary visible Pi output and independently chooses what to say. Continue working normally; no acknowledgement or realtime_send_* tools are needed for companion messages. Voice lifecycle changes do not interrupt work.`;
 	return active
 		? `Realtime voice interface is active for session ${session.providerSessionId} (${session.provider}/${session.model}, mode=${session.interactionMode}). This is non-turn-triggering session context for the next real Pi turn. If incoming work is delivered as a realtime request, actively use realtime_send_ack, realtime_send_status, and realtime_send_text as the main communication path back to the voice interface.`
 		: `Realtime voice interface stopped for session ${session.providerSessionId} (${session.provider}/${session.model}, mode=${session.interactionMode}). This is non-turn-triggering session context for the next real Pi turn. Realtime is not currently active unless another realtime session is explicitly reported active. Do not use realtime_send_* unless realtime_status shows a live target.`;
@@ -32,8 +40,10 @@ export function renderRealtimeSessionMessage(session: VoiceSessionRecord, active
 function realtimeRequestContextLines(input: VoiceInstructionInput): string[] {
 	const lines: string[] = [];
 	if (input.userUtteranceSummary) lines.push(`- User voice summary: ${input.userUtteranceSummary}`);
-	if (input.citedCitationIds.length > 0) lines.push(`- Cited Pinotator citation ids: ${input.citedCitationIds.join(", ")}`);
-	if (input.citationDeckRevision !== undefined) lines.push(`- Realtime citation deck revision: ${input.citationDeckRevision}`);
+	if (input.citedCitationIds.length > 0)
+		lines.push(`- Cited Pinotator citation ids: ${input.citedCitationIds.join(", ")}`);
+	if (input.citationDeckRevision !== undefined)
+		lines.push(`- Realtime citation deck revision: ${input.citationDeckRevision}`);
 	lines.push(`- Realtime provider session id: ${input.providerSessionId}`);
 	lines.push(`- Realtime instruction source: ${input.source}`);
 	lines.push(`- Urgency: ${input.urgency}`);
@@ -44,6 +54,13 @@ function realtimeRequestContextLines(input: VoiceInstructionInput): string[] {
 
 function plainContent(content: unknown): string {
 	if (typeof content === "string") return content;
-	if (Array.isArray(content)) return content.map((part) => typeof part === "object" && part !== null && "text" in part && typeof part.text === "string" ? part.text : "[non-text content]").join(" ");
+	if (Array.isArray(content))
+		return content
+			.map((part) =>
+				typeof part === "object" && part !== null && "text" in part && typeof part.text === "string"
+					? part.text
+					: "[non-text content]",
+			)
+			.join(" ");
 	return "";
 }

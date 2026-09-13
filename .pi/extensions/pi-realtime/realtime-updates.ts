@@ -12,7 +12,9 @@ ${escapeText(input.text)}
 
 export function realtimeUpdateResponseInstructions(input: RealtimeContextPushRequest): string {
 	const rendering = input.rendering ?? { mode: "verbatim" as const, envelope: "speak_this_verbatim" as const };
-	return rendering.mode === "compact_summary" ? compactSummaryInstructions(input.kind, rendering.envelope) : verbatimInstructions(input.kind, rendering.envelope);
+	return rendering.mode === "compact_summary"
+		? compactSummaryInstructions(input.kind, rendering.envelope)
+		: verbatimInstructions(input.kind, rendering.envelope);
 }
 
 function verbatimInstructions(kind: RealtimeContextPushRequest["kind"], envelope: string): string {
@@ -49,13 +51,17 @@ Do not imply omitted details were spoken in full. This is not a user request. Do
 }
 
 function renderJsonTaskEnvelope(input: RealtimeContextPushRequest): string {
-	return JSON.stringify({
-		source: input.source,
-		destination: "user",
-		action: "read_verbatim",
-		kind: input.kind,
-		text: input.text,
-	}, null, 2);
+	return JSON.stringify(
+		{
+			source: input.source,
+			destination: "user",
+			action: "read_verbatim",
+			kind: input.kind,
+			text: input.text,
+		},
+		null,
+		2,
+	);
 }
 
 function escapeAttr(value: string): string {

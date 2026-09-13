@@ -1,11 +1,33 @@
 import { OpenAIRealtimeWS as OpenAIRealtimeWebSocket } from "openai/realtime/ws";
 import { createOpenAIRealtimeClient, openAIConnectionConfig, openAIWebSocketOptions } from "./connection";
 import type { RealtimeClientEvent, RealtimeServerEvent } from "openai/resources/realtime/realtime";
-import type { ContextPacket, DisconnectReason, NormalizedProviderEvent, ProviderDeliveryReceipt, ProviderInteractionConfig, ProviderKind, ProviderSessionId, VoiceToolName, VoiceToolResultRecord, VoiceToolSurface } from "../../types";
-import type { ProviderConnectConfig, ProviderEventSink, RealtimeProviderAdapter, RealtimeContextPushRequest, ToolResultResponsePolicy, VoiceResponseRequest } from "../types";
+import type {
+	ContextPacket,
+	DisconnectReason,
+	NormalizedProviderEvent,
+	ProviderDeliveryReceipt,
+	ProviderInteractionConfig,
+	ProviderKind,
+	ProviderSessionId,
+	VoiceToolName,
+	VoiceToolResultRecord,
+	VoiceToolSurface,
+} from "../../types";
+import type {
+	ProviderConnectConfig,
+	ProviderEventSink,
+	RealtimeProviderAdapter,
+	RealtimeContextPushRequest,
+	ToolResultResponsePolicy,
+	VoiceResponseRequest,
+} from "../types";
 import { backendUpdateItemEvent, backendUpdateResponseEvent, responseCreateEvent } from "./responses";
 import { usageFromOpenAIInputTranscription, usageFromOpenAIResponseDone } from "./usage";
-import { buildOpenAIRealtimeAudioConfig, isOpenAITranscriptActionable, openAIRealtimeAudioInput } from "./session-config";
+import {
+	buildOpenAIRealtimeAudioConfig,
+	isOpenAITranscriptActionable,
+	openAIRealtimeAudioInput,
+} from "./session-config";
 import { hasOpenAIRealtimeCredentials, renderContextPacket, toOpenAITool } from "./shared";
 
 export { hasOpenAIRealtimeCredentials };
@@ -30,12 +52,16 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 	}
 
 	async connect(config: ProviderConnectConfig, sink: ProviderEventSink): Promise<void> {
-		if (!hasOpenAIRealtimeCredentials()) throw new Error("OPENAI_API_KEY is required to start an OpenAI realtime session.");
+		if (!hasOpenAIRealtimeCredentials())
+			throw new Error("OPENAI_API_KEY is required to start an OpenAI realtime session.");
 		this.sink = sink;
 		this.model = config.model;
 		this.interaction = config.interaction;
 		const connection = openAIConnectionConfig();
-		const rt = new OpenAIRealtimeWebSocket({ model: config.model, options: openAIWebSocketOptions(connection) }, createOpenAIRealtimeClient(connection));
+		const rt = new OpenAIRealtimeWebSocket(
+			{ model: config.model, options: openAIWebSocketOptions(connection) },
+			createOpenAIRealtimeClient(connection),
+		);
 		this.socket = rt;
 		rt.on("event", (event) => this.handleServerEvent(event));
 		rt.on("error", (error) => this.emit({ type: "error", message: error.message, recoverable: true }));
@@ -53,8 +79,17 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 	}
 
 	async updateContext(packet: ContextPacket): Promise<ProviderDeliveryReceipt> {
-		this.send({ type: "conversation.item.create", item: { type: "message", role: "system", content: [{ type: "input_text", text: renderContextPacket(packet) }] } } as RealtimeClientEvent);
-		this.emit({ type: "context_delivery", packetId: packet.packetId, revision: packet.revision, status: "delivered", message: "context item sent" });
+		this.send({
+			type: "conversation.item.create",
+			item: { type: "message", role: "system", content: [{ type: "input_text", text: renderContextPacket(packet) }] },
+		} as RealtimeClientEvent);
+		this.emit({
+			type: "context_delivery",
+			packetId: packet.packetId,
+			revision: packet.revision,
+			status: "delivered",
+			message: "context item sent",
+		});
 		return { status: "delivered", message: "context item sent" };
 	}
 
@@ -65,20 +100,34 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 	}
 
 	async sendToolResult(result: VoiceToolResultRecord, policy: ToolResultResponsePolicy = "none"): Promise<void> {
-		this.send({ type: "conversation.item.create", item: { type: "function_call_output", call_id: result.voiceToolCallId, output: result.resultText } } as RealtimeClientEvent);
+		this.send({
+			type: "conversation.item.create",
+			item: { type: "function_call_output", call_id: result.voiceToolCallId, output: result.resultText },
+		} as RealtimeClientEvent);
 		if (policy === "none") return;
 		await this.requestResponse({ reason: policy === "final_ack" ? "tool_result_final_ack" : "tool_result_continue" });
 	}
 
 	async pushContext(input: RealtimeContextPushRequest): Promise<ProviderDeliveryReceipt> {
 		const interaction = this.requireInteraction();
-		if (input.mode !== "request_spoken_response" || interaction.backendSpeechContext !== "isolated_update") this.send(backendUpdateItemEvent(input));
-		if (input.mode === "request_spoken_response") this.send(backendUpdateResponseEvent(input, interaction, [this.audioOutputEnabled ? "audio" : "text"]));
-		return { status: "delivered", message: input.mode === "request_spoken_response" ? "backend update sent and spoken response requested" : "backend update sent without response" };
+		if (input.mode !== "request_spoken_response" || interaction.backendSpeechContext !== "isolated_update")
+			this.send(backendUpdateItemEvent(input));
+		if (input.mode === "request_spoken_response")
+			this.send(backendUpdateResponseEvent(input, interaction, [this.audioOutputEnabled ? "audio" : "text"]));
+		return {
+			status: "delivered",
+			message:
+				input.mode === "request_spoken_response"
+					? "backend update sent and spoken response requested"
+					: "backend update sent without response",
+		};
 	}
 
 	async sendTextInput(text: string): Promise<ProviderDeliveryReceipt> {
-		this.send({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text", text }] } } as RealtimeClientEvent);
+		this.send({
+			type: "conversation.item.create",
+			item: { type: "message", role: "user", content: [{ type: "input_text", text }] },
+		} as RealtimeClientEvent);
 		await this.requestResponse({ reason: "manual" });
 		return { status: "delivered", message: "OpenAI realtime user text item sent" };
 	}
@@ -102,41 +151,122 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 		const surface = this.toolSurface;
 		const interaction = this.interaction;
 		if (!surface || !interaction) return;
-		this.send({ type: "session.update", session: { type: "realtime", model: this.model, instructions: this.instructions, output_modalities: [this.audioOutputEnabled ? "audio" : "text"], audio: buildOpenAIRealtimeAudioConfig({ ...openAIRealtimeAudioInput(interaction), includeRawPcmFormat: true, includeRawPcmOutputFormat: true }), tools: interaction.tools.map(toOpenAITool), tool_choice: interaction.toolChoice } } as RealtimeClientEvent);
+		this.send({
+			type: "session.update",
+			session: {
+				type: "realtime",
+				model: this.model,
+				instructions: this.instructions,
+				output_modalities: [this.audioOutputEnabled ? "audio" : "text"],
+				audio: buildOpenAIRealtimeAudioConfig({
+					...openAIRealtimeAudioInput(interaction),
+					includeRawPcmFormat: true,
+					includeRawPcmOutputFormat: true,
+				}),
+				tools: interaction.tools.map(toOpenAITool),
+				tool_choice: interaction.toolChoice,
+			},
+		} as RealtimeClientEvent);
 	}
 
 	private awaitOpen(rt: OpenAIRealtimeWebSocket): Promise<void> {
 		return new Promise((resolve, reject) => {
-			const timer = setTimeout(() => reject(new Error("Timed out waiting for OpenAI realtime socket to open.")), OPENAI_WS_CONNECT_TIMEOUT_MS);
-			rt.socket.addEventListener("open", () => { clearTimeout(timer); resolve(); }, { once: true });
-			rt.socket.addEventListener("error", () => { clearTimeout(timer); reject(new Error("OpenAI realtime socket error before open.")); }, { once: true });
+			const timer = setTimeout(
+				() => reject(new Error("Timed out waiting for OpenAI realtime socket to open.")),
+				OPENAI_WS_CONNECT_TIMEOUT_MS,
+			);
+			rt.socket.addEventListener(
+				"open",
+				() => {
+					clearTimeout(timer);
+					resolve();
+				},
+				{ once: true },
+			);
+			rt.socket.addEventListener(
+				"error",
+				() => {
+					clearTimeout(timer);
+					reject(new Error("OpenAI realtime socket error before open."));
+				},
+				{ once: true },
+			);
 		});
 	}
 
 	private handleServerEvent(event: RealtimeServerEvent): void {
-		if (event.type === "response.function_call_arguments.done") return this.emitToolCall(event.name, event.call_id, event.arguments, event.event_id);
+		if (event.type === "response.function_call_arguments.done")
+			return this.emitToolCall(event.name, event.call_id, event.arguments, event.event_id);
 		if (event.type === "conversation.item.input_audio_transcription.completed") {
-			this.emitUsage(usageFromOpenAIInputTranscription(event, { providerSessionId: this.providerSessionId, model: this.model, providerEventId: event.event_id }));
+			this.emitUsage(
+				usageFromOpenAIInputTranscription(event, {
+					providerSessionId: this.providerSessionId,
+					model: this.model,
+					providerEventId: event.event_id,
+				}),
+			);
 			this.emit({ type: "user_transcript", text: event.transcript, final: true, providerEventId: event.event_id });
-			if (isOpenAITranscriptActionable(event.transcript) && this.interaction?.transcriptHandling.response === "model") void this.requestResponse({ reason: "valid_transcript" }).catch((error) => this.emit({ type: "error", message: error.message, recoverable: true, providerEventId: event.event_id }));
+			if (isOpenAITranscriptActionable(event.transcript) && this.interaction?.transcriptHandling.response === "model")
+				void this.requestResponse({ reason: "valid_transcript" }).catch((error) =>
+					this.emit({ type: "error", message: error.message, recoverable: true, providerEventId: event.event_id }),
+				);
 			return;
 		}
 		if (event.type === "conversation.item.input_audio_transcription.failed") {
-			return this.emit({ type: "error", message: `Input transcription failed (${event.error?.code ?? "unknown"}): ${event.error?.message ?? "Check the configured transcription model/deployment."}`, recoverable: true, providerEventId: event.event_id });
+			return this.emit({
+				type: "error",
+				message: `Input transcription failed (${event.error?.code ?? "unknown"}): ${event.error?.message ?? "Check the configured transcription model/deployment."}`,
+				recoverable: true,
+				providerEventId: event.event_id,
+			});
 		}
-		if (event.type === "response.output_text.done") return this.emit({ type: "assistant_transcript", text: event.text, final: true, providerEventId: event.event_id });
-		if (event.type === "response.output_audio_transcript.done") return this.emit({ type: "assistant_transcript", text: event.transcript, final: true, providerEventId: event.event_id });
-		if (event.type === "response.output_audio.delta") return this.emitAudio(Buffer.from(event.delta, "base64"), event.event_id);
-		if (event.type === "input_audio_buffer.speech_started") return this.emit({ type: "turn_signal", signal: "speech_started", providerEventId: event.event_id });
-		if (event.type === "input_audio_buffer.speech_stopped") return this.emit({ type: "turn_signal", signal: "speech_stopped", providerEventId: event.event_id });
+		if (event.type === "response.output_text.done")
+			return this.emit({
+				type: "assistant_transcript",
+				text: event.text,
+				final: true,
+				providerEventId: event.event_id,
+			});
+		if (event.type === "response.output_audio_transcript.done")
+			return this.emit({
+				type: "assistant_transcript",
+				text: event.transcript,
+				final: true,
+				providerEventId: event.event_id,
+			});
+		if (event.type === "response.output_audio.delta")
+			return this.emitAudio(Buffer.from(event.delta, "base64"), event.event_id);
+		if (event.type === "input_audio_buffer.speech_started")
+			return this.emit({ type: "turn_signal", signal: "speech_started", providerEventId: event.event_id });
+		if (event.type === "input_audio_buffer.speech_stopped")
+			return this.emit({ type: "turn_signal", signal: "speech_stopped", providerEventId: event.event_id });
 		if (event.type === "response.done") {
-			this.emitUsage(usageFromOpenAIResponseDone(event, { providerSessionId: this.providerSessionId, model: this.model, providerEventId: event.event_id }));
+			this.emitUsage(
+				usageFromOpenAIResponseDone(event, {
+					providerSessionId: this.providerSessionId,
+					model: this.model,
+					providerEventId: event.event_id,
+				}),
+			);
 			return this.emit({ type: "turn_signal", signal: "turn_complete", providerEventId: event.event_id });
 		}
 	}
 
 	private emitToolCall(name: string, callId: string, rawArgs: string, providerEventId: string): void {
-		this.emit({ type: "tool_call", providerEventId, call: { voiceToolCallId: callId, provider: "openai", providerSessionId: this.providerSessionId, providerToolCallId: callId, name: normalizeToolName(name), arguments: parseArgs(rawArgs), status: "pending", createdAt: Date.now() } });
+		this.emit({
+			type: "tool_call",
+			providerEventId,
+			call: {
+				voiceToolCallId: callId,
+				provider: "openai",
+				providerSessionId: this.providerSessionId,
+				providerToolCallId: callId,
+				name: normalizeToolName(name),
+				arguments: parseArgs(rawArgs),
+				status: "pending",
+				createdAt: Date.now(),
+			},
+		});
 	}
 
 	private emitUsage(observation: ReturnType<typeof usageFromOpenAIResponseDone>): void {
@@ -161,7 +291,13 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 	}
 
 	private emit(event: Record<string, unknown> & { type: NormalizedProviderEvent["type"] }): void {
-		this.sink?.onProviderEvent({ ...event, provider: "openai", providerSessionId: this.providerSessionId, localSeq: ++this.seq, at: Date.now() } as NormalizedProviderEvent);
+		this.sink?.onProviderEvent({
+			...event,
+			provider: "openai",
+			providerSessionId: this.providerSessionId,
+			localSeq: ++this.seq,
+			at: Date.now(),
+		} as NormalizedProviderEvent);
 	}
 }
 
@@ -170,14 +306,24 @@ export function createOpenAIRealtimeProvider(providerSessionId: ProviderSessionI
 }
 
 function normalizeToolName(name: string): VoiceToolName {
-	const allowed: readonly string[] = ["request", "pi_state_snapshot", "pi_send_instruction", "pi_wait_for_update", "pi_realtime_status", "pinotator_citations_list", "pinotator_citation_resolve"];
+	const allowed: readonly string[] = [
+		"request",
+		"pi_state_snapshot",
+		"pi_send_instruction",
+		"pi_wait_for_update",
+		"pi_realtime_status",
+		"pinotator_citations_list",
+		"pinotator_citation_resolve",
+	];
 	return allowed.includes(name) ? (name as VoiceToolName) : "request";
 }
 
 function parseArgs(rawArgs: string): Record<string, unknown> {
 	try {
 		const parsed = JSON.parse(rawArgs) as unknown;
-		return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed) ? parsed as Record<string, unknown> : {};
+		return typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+			? (parsed as Record<string, unknown>)
+			: {};
 	} catch {
 		return {};
 	}

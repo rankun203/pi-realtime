@@ -24,17 +24,23 @@ const DEFAULT_SERVER_VAD_SILENCE_DURATION_MS = 700;
 const DEFAULT_SERVER_VAD_PREFIX_PADDING_MS = 300;
 
 /** Agent turns are driven by native audio VAD, not auxiliary transcription. */
-export function openAIRealtimeAudioInput(interaction: ProviderInteractionConfig, env: NodeJS.ProcessEnv = process.env): OpenAIRealtimeAudioConfigInput {
+export function openAIRealtimeAudioInput(
+	interaction: ProviderInteractionConfig,
+	env: NodeJS.ProcessEnv = process.env,
+): OpenAIRealtimeAudioConfigInput {
 	const native = interaction.transcriptHandling.response === "native";
 	const configured = loadRealtimeEnv(env).OPENAI_REALTIME_TRANSCRIPTION_MODEL?.trim();
-	if (configured === "off" && !native) throw new Error("Eco/manual transcript routing requires a transcription model; transcriptionModel cannot be off.");
+	if (configured === "off" && !native)
+		throw new Error("Eco/manual transcript routing requires a transcription model; transcriptionModel cannot be off.");
 	return {
 		turnControl: native ? "auto_response" : "manual_response_after_turn",
 		transcriptionModel: configured === "off" ? null : configured || (native ? null : "gpt-4o-mini-transcribe"),
 	};
 }
 
-export function summarizeOpenAIRealtimeAudioConfig(input: OpenAIRealtimeAudioConfigInput = {}): Record<string, unknown> {
+export function summarizeOpenAIRealtimeAudioConfig(
+	input: OpenAIRealtimeAudioConfigInput = {},
+): Record<string, unknown> {
 	const audio = buildOpenAIRealtimeAudioConfig(input);
 	const turnDetection = audio.input?.turn_detection;
 	return {
@@ -54,7 +60,9 @@ export function buildOpenAIRealtimeAudioConfig(input: OpenAIRealtimeAudioConfigI
 	return {
 		input: {
 			...(input.includeRawPcmFormat ? { format: { type: "audio/pcm", rate: 24000 } } : {}),
-			...(input.transcriptionModel === null ? {} : { transcription: { model: input.transcriptionModel ?? "gpt-4o-mini-transcribe" } }),
+			...(input.transcriptionModel === null
+				? {}
+				: { transcription: { model: input.transcriptionModel ?? "gpt-4o-mini-transcribe" } }),
 			...(noiseReduction === "off" ? {} : { noise_reduction: { type: noiseReduction } }),
 			turn_detection: turnDetectionConfig(input),
 		},
@@ -65,7 +73,10 @@ export function buildOpenAIRealtimeAudioConfig(input: OpenAIRealtimeAudioConfigI
 	};
 }
 
-export function openAITurnResponseControl(input: OpenAIRealtimeAudioConfigInput = {}): { create_response: boolean; interrupt_response: true } {
+export function openAITurnResponseControl(input: OpenAIRealtimeAudioConfigInput = {}): {
+	create_response: boolean;
+	interrupt_response: true;
+} {
 	return { create_response: (input.turnControl ?? DEFAULT_TURN_CONTROL) === "auto_response", interrupt_response: true };
 }
 
@@ -73,10 +84,19 @@ export function isOpenAITranscriptActionable(transcript: string): boolean {
 	return transcript.replace(/[\s\p{P}\p{S}]/gu, "").length >= 4;
 }
 
-function turnDetectionConfig(input: OpenAIRealtimeAudioConfigInput): NonNullable<NonNullable<RealtimeAudioConfig["input"]>["turn_detection"]> {
+function turnDetectionConfig(
+	input: OpenAIRealtimeAudioConfigInput,
+): NonNullable<NonNullable<RealtimeAudioConfig["input"]>["turn_detection"]> {
 	const responseControl = openAITurnResponseControl(input);
 	if ((input.vadMode ?? DEFAULT_VAD_MODE) === "server") {
-		return { type: "server_vad", threshold: DEFAULT_SERVER_VAD_THRESHOLD, silence_duration_ms: DEFAULT_SERVER_VAD_SILENCE_DURATION_MS, prefix_padding_ms: DEFAULT_SERVER_VAD_PREFIX_PADDING_MS, idle_timeout_ms: null, ...responseControl };
+		return {
+			type: "server_vad",
+			threshold: DEFAULT_SERVER_VAD_THRESHOLD,
+			silence_duration_ms: DEFAULT_SERVER_VAD_SILENCE_DURATION_MS,
+			prefix_padding_ms: DEFAULT_SERVER_VAD_PREFIX_PADDING_MS,
+			idle_timeout_ms: null,
+			...responseControl,
+		};
 	}
 	return { type: "semantic_vad", ...responseControl };
 }

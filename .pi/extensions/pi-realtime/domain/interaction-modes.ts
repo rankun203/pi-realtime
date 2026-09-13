@@ -1,5 +1,10 @@
 import { defaultVoiceToolSurface, voiceSpeechRendererPrompt, voiceSystemPrompt } from "../prompt";
-import type { ProviderInteractionConfig, RealtimeInteractionMode, RealtimeInteractionModeId, VoiceToolSurface } from "../types";
+import type {
+	ProviderInteractionConfig,
+	RealtimeInteractionMode,
+	RealtimeInteractionModeId,
+	VoiceToolSurface,
+} from "../types";
 
 const REQUEST_TOOL_SURFACE = defaultVoiceToolSurface();
 const EMPTY_TOOL_SURFACE: VoiceToolSurface = { revision: 1, tools: [] };
@@ -29,7 +34,11 @@ const ECO_MODE: RealtimeInteractionMode = {
 		mode: "eco",
 		tools: [],
 		toolChoice: "none",
-		transcriptHandling: { response: "suppress", backendRoute: "submit_instruction", retention: "delete_after_transcript" },
+		transcriptHandling: {
+			response: "suppress",
+			backendRoute: "submit_instruction",
+			retention: "delete_after_transcript",
+		},
 		backendSpeechContext: "isolated_update",
 	},
 };

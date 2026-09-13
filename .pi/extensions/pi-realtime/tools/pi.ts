@@ -6,12 +6,21 @@ import type { RealtimePushSource } from "../types";
 
 const RealtimeSendParams = Type.Object({
 	text: Type.String({ description: "Non-empty message to send to the active realtime voice interface." }),
-	providerSessionId: Type.Optional(Type.String({ description: "Optional realtime provider session id. Defaults to the realtime session that originated the current request, then the active primary/live session." })),
+	providerSessionId: Type.Optional(
+		Type.String({
+			description:
+				"Optional realtime provider session id. Defaults to the realtime session that originated the current request, then the active primary/live session.",
+		}),
+	),
 	summary: Type.Optional(Type.String({ description: "Optional compact trace/UI label for the update." })),
 });
 
 const RealtimeStatusParams = Type.Object({
-	providerSessionId: Type.Optional(Type.String({ description: "Optional realtime provider session id to check. Defaults to the current realtime send target." })),
+	providerSessionId: Type.Optional(
+		Type.String({
+			description: "Optional realtime provider session id to check. Defaults to the current realtime send target.",
+		}),
+	),
 });
 
 export function registerRealtimeModelTools(pi: ExtensionAPI, service: Service): void {
@@ -19,7 +28,8 @@ export function registerRealtimeModelTools(pi: ExtensionAPI, service: Service): 
 	registerRealtimeSendTool(pi, service, {
 		name: "realtime_send_ack",
 		label: "Realtime Ack",
-		description: "Send a short, contextually relevant spoken acknowledgement to the active realtime voice interface before requested work is done, phrased as what the unified assistant is doing now.",
+		description:
+			"Send a short, contextually relevant spoken acknowledgement to the active realtime voice interface before requested work is done, phrased as what the unified assistant is doing now.",
 		kind: "ack",
 		source: "pi_model_tool",
 		defaultSummary: "acknowledgement",
@@ -27,7 +37,8 @@ export function registerRealtimeModelTools(pi: ExtensionAPI, service: Service): 
 	registerRealtimeSendTool(pi, service, {
 		name: "realtime_send_status",
 		label: "Realtime Status",
-		description: "Send a concise progress update to the active realtime voice interface during work: checkpoints, milestones, achievements, failures, successes, approach changes, or useful diversions. Prefer this for long-running implementation or investigation turns.",
+		description:
+			"Send a concise progress update to the active realtime voice interface during work: checkpoints, milestones, achievements, failures, successes, approach changes, or useful diversions. Prefer this for long-running implementation or investigation turns.",
 		kind: "status",
 		source: "pi_model_tool",
 		defaultSummary: "status update",
@@ -35,7 +46,8 @@ export function registerRealtimeModelTools(pi: ExtensionAPI, service: Service): 
 	registerRealtimeSendTool(pi, service, {
 		name: "realtime_send_text",
 		label: "Realtime Text",
-		description: "Send summaries, reports, final answers, or other text context to the active realtime voice interface when ack/status is not the right category. Use for final reports back to a realtime-originated request.",
+		description:
+			"Send summaries, reports, final answers, or other text context to the active realtime voice interface when ack/status is not the right category. Use for final reports back to a realtime-originated request.",
 		kind: "text",
 		source: "pi_model_tool",
 		defaultSummary: "text update",
@@ -46,7 +58,8 @@ function registerRealtimeStatusTool(pi: ExtensionAPI, service: Service): void {
 	pi.registerTool({
 		name: "realtime_status",
 		label: "Realtime Status",
-		description: "Check whether a realtime voice session is active/live and whether realtime_send_* tools can currently reach it. Use before realtime sends when status is uncertain or after a realtime send reports no active session.",
+		description:
+			"Check whether a realtime voice session is active/live and whether realtime_send_* tools can currently reach it. Use before realtime sends when status is uncertain or after a realtime send reports no active session.",
 		promptSnippet: "Check current realtime voice session status and send-tool availability.",
 		promptGuidelines: [
 			"Use realtime_status to check current realtime voice session status directly when you are unsure whether realtime is active/live.",
@@ -61,7 +74,18 @@ function registerRealtimeStatusTool(pi: ExtensionAPI, service: Service): void {
 	});
 }
 
-function registerRealtimeSendTool(pi: ExtensionAPI, service: Service, input: { name: "realtime_send_ack" | "realtime_send_status" | "realtime_send_text"; label: string; description: string; kind: "ack" | "status" | "text"; source: RealtimePushSource; defaultSummary: string }): void {
+function registerRealtimeSendTool(
+	pi: ExtensionAPI,
+	service: Service,
+	input: {
+		name: "realtime_send_ack" | "realtime_send_status" | "realtime_send_text";
+		label: string;
+		description: string;
+		kind: "ack" | "status" | "text";
+		source: RealtimePushSource;
+		defaultSummary: string;
+	},
+): void {
 	pi.registerTool({
 		name: input.name,
 		label: input.label,
@@ -74,19 +98,48 @@ function registerRealtimeSendTool(pi: ExtensionAPI, service: Service, input: { n
 		],
 		parameters: RealtimeSendParams,
 		async execute(_toolCallId, params) {
-			const message = await service.pushRealtimeContext({ providerSessionId: params.providerSessionId, text: params.text, mode: "request_spoken_response", source: input.source, kind: input.kind, summary: params.summary ?? input.defaultSummary });
-			return { content: [{ type: "text", text: message }], details: { providerSessionId: params.providerSessionId, tool: input.name, summary: params.summary ?? input.defaultSummary, sentText: params.text } };
+			const message = await service.pushRealtimeContext({
+				providerSessionId: params.providerSessionId,
+				text: params.text,
+				mode: "request_spoken_response",
+				source: input.source,
+				kind: input.kind,
+				summary: params.summary ?? input.defaultSummary,
+			});
+			return {
+				content: [{ type: "text", text: message }],
+				details: {
+					providerSessionId: params.providerSessionId,
+					tool: input.name,
+					summary: params.summary ?? input.defaultSummary,
+					sentText: params.text,
+				},
+			};
 		},
 		renderResult: renderRealtimeSendResult,
 	});
 }
 
-function renderRealtimeSendResult(result: AgentToolResult<unknown>, _options: ToolRenderResultOptions, theme: { fg(role: string, text: string): string }, context: { args: { text?: unknown; summary?: unknown } }): Text {
+function renderRealtimeSendResult(
+	result: AgentToolResult<unknown>,
+	_options: ToolRenderResultOptions,
+	theme: { fg(role: string, text: string): string },
+	context: { args: { text?: unknown; summary?: unknown } },
+): Text {
 	const args = context.args;
 	const details = result.details as { sentText?: unknown; summary?: unknown } | undefined;
-	const sentText = typeof details?.sentText === "string" ? details.sentText : typeof args.text === "string" ? args.text : undefined;
-	const summary = typeof details?.summary === "string" ? details.summary : typeof args.summary === "string" ? args.summary : undefined;
-	const resultText = result.content.filter((part): part is { type: "text"; text: string } => part.type === "text").map((part) => part.text).join("\n");
+	const sentText =
+		typeof details?.sentText === "string" ? details.sentText : typeof args.text === "string" ? args.text : undefined;
+	const summary =
+		typeof details?.summary === "string"
+			? details.summary
+			: typeof args.summary === "string"
+				? args.summary
+				: undefined;
+	const resultText = result.content
+		.filter((part): part is { type: "text"; text: string } => part.type === "text")
+		.map((part) => part.text)
+		.join("\n");
 	const lines = [
 		theme.fg("warning", summary ?? "realtime_send"),
 		sentText ?? "[no text payload]",

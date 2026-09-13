@@ -7,7 +7,11 @@ import { hasOpenAIRealtimeCredentials, toOpenAITool } from "./shared";
 /** @deprecated Use hasOpenAIRealtimeCredentials from ./shared instead. */
 export const hasOpenAIWebRTCCredentials = hasOpenAIRealtimeCredentials;
 
-export async function createOpenAIWebRTCClientSecret(input: { model: string; instructions: string; interaction: ProviderInteractionConfig }): Promise<ClientSecretCreateResponse & { callsUrl: string }> {
+export async function createOpenAIWebRTCClientSecret(input: {
+	model: string;
+	instructions: string;
+	interaction: ProviderInteractionConfig;
+}): Promise<ClientSecretCreateResponse & { callsUrl: string }> {
 	const client = createOpenAIRealtimeClient();
 	const secret = await client.realtime.clientSecrets.create({
 		expires_after: { anchor: "created_at", seconds: 600 },

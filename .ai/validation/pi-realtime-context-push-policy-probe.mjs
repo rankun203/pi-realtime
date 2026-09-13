@@ -15,7 +15,10 @@ const fake = readFileSync(".pi/extensions/pi-realtime/providers/fake.ts", "utf8"
 const prompt = readFileSync(".pi/extensions/pi-realtime/prompt.ts", "utf8");
 const messages = readFileSync(".pi/extensions/pi-realtime/messages.ts", "utf8");
 const updates = readFileSync(".pi/extensions/pi-realtime/realtime-updates.ts", "utf8");
-const plan = readFileSync(".ai/docs/realtime-voice/pi-to-realtime-context-and-tool-response-policy-goal-plan.md", "utf8");
+const plan = readFileSync(
+	".ai/docs/realtime-voice/pi-to-realtime-context-and-tool-response-policy-goal-plan.md",
+	"utf8",
+);
 
 assert.match(runtime, /registerRealtimeModelTools\(pi, service\)/);
 assert.match(runtime, /registerRealtimeMessageRenderers\(pi\)/);

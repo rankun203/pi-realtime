@@ -2,7 +2,10 @@ import type { ContextEvent } from "@earendil-works/pi-coding-agent";
 import { CUSTOM_MESSAGE_TYPE, type RealtimeState } from "./types";
 import { isRecord } from "./events";
 
-export function filterRealtimeContextMessages(event: ContextEvent, state: RealtimeState): { messages: ContextEvent["messages"] } | undefined {
+export function filterRealtimeContextMessages(
+	event: ContextEvent,
+	state: RealtimeState,
+): { messages: ContextEvent["messages"] } | undefined {
 	const messages = event.messages.filter((message) => !isStaleRealtimeMessage(message, state));
 	return messages.length === event.messages.length ? undefined : { messages };
 }

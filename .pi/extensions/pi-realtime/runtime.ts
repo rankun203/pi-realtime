@@ -15,7 +15,9 @@ export function registerPiRealtime(pi: ExtensionAPI): void {
 	const store = createStore(pi);
 	let currentCtx: ExtensionContext | undefined;
 	const controlPlane = createControlPlane(pi, store, () => currentCtx);
-	const service = createService(store, controlPlane, () => { if (currentCtx) syncUi(currentCtx, service); });
+	const service = createService(store, controlPlane, () => {
+		if (currentCtx) syncUi(currentCtx, service);
+	});
 	registerRealtimeMessageRenderers(pi);
 
 	pi.registerCommand("realtime", {
@@ -39,11 +41,27 @@ export function registerPiRealtime(pi: ExtensionAPI): void {
 		},
 	});
 
-	pi.on("session_start", async (_event, ctx) => { currentCtx = ctx; hydrate(ctx, store, service); syncUi(ctx, service); });
-	pi.on("session_tree", async (_event, ctx) => { currentCtx = ctx; controlPlane.branchChanged?.(ctx); hydrate(ctx, store, service); syncUi(ctx, service); });
-	pi.on("session_compact", async (_event, ctx) => { currentCtx = ctx; hydrate(ctx, store, service); syncUi(ctx, service); });
+	pi.on("session_start", async (_event, ctx) => {
+		currentCtx = ctx;
+		hydrate(ctx, store, service);
+		syncUi(ctx, service);
+	});
+	pi.on("session_tree", async (_event, ctx) => {
+		currentCtx = ctx;
+		controlPlane.branchChanged?.(ctx);
+		hydrate(ctx, store, service);
+		syncUi(ctx, service);
+	});
+	pi.on("session_compact", async (_event, ctx) => {
+		currentCtx = ctx;
+		hydrate(ctx, store, service);
+		syncUi(ctx, service);
+	});
 	pi.on("context", (event) => filterRealtimeContextMessages(event, service.state()));
-	pi.on("session_shutdown", async () => { await service.shutdown(); currentCtx = undefined; });
+	pi.on("session_shutdown", async () => {
+		await service.shutdown();
+		currentCtx = undefined;
+	});
 }
 
 function hydrate(ctx: ExtensionContext, store: Store, service: Service): void {

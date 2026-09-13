@@ -1,4 +1,19 @@
-import type { BackendUpdateSpeechEnvelope, BackendUpdateSpeechRenderingMode, ContextPacket, DisconnectReason, NormalizedProviderEvent, ProviderDeliveryReceipt, ProviderInteractionConfig, ProviderKind, ProviderSessionId, RealtimePushMode, RealtimePushSource, RealtimeUpdateKind, VoiceToolResultRecord, VoiceToolSurface } from "../types";
+import type {
+	BackendUpdateSpeechEnvelope,
+	BackendUpdateSpeechRenderingMode,
+	ContextPacket,
+	DisconnectReason,
+	NormalizedProviderEvent,
+	ProviderDeliveryReceipt,
+	ProviderInteractionConfig,
+	ProviderKind,
+	ProviderSessionId,
+	RealtimePushMode,
+	RealtimePushSource,
+	RealtimeUpdateKind,
+	VoiceToolResultRecord,
+	VoiceToolSurface,
+} from "../types";
 
 export type ProviderCapabilityPreferences = {
 	preferPassiveContext: boolean;
@@ -19,7 +34,14 @@ export type ProviderConnectConfig = {
 };
 
 export type VoiceResponseRequest = {
-	reason: "tool_result" | "tool_result_continue" | "tool_result_final_ack" | "context_update" | "manual" | "valid_transcript" | "pi_context_push";
+	reason:
+		| "tool_result"
+		| "tool_result_continue"
+		| "tool_result_final_ack"
+		| "context_update"
+		| "manual"
+		| "valid_transcript"
+		| "pi_context_push";
 	instructions?: string;
 };
 
@@ -48,7 +70,12 @@ export type RealtimeContextPushRequest = {
 
 export type ProviderEventSink = {
 	onProviderEvent(event: NormalizedProviderEvent): void;
-	onProviderAudio?(chunk: { providerSessionId: ProviderSessionId; provider: ProviderKind; audio: Buffer; providerEventId?: string }): void;
+	onProviderAudio?(chunk: {
+		providerSessionId: ProviderSessionId;
+		provider: ProviderKind;
+		audio: Buffer;
+		providerEventId?: string;
+	}): void;
 };
 
 export type RealtimeProviderAdapter = {

@@ -10,7 +10,10 @@ assert.match(source, /RealtimeInteractionModeId/);
 assert.match(source, /const AGENT_MODE: RealtimeInteractionMode/);
 assert.match(source, /const ECO_MODE: RealtimeInteractionMode/);
 assert.match(source, /id: "agent"[\s\S]*acceptModelToolCalls: true[\s\S]*toolChoice: "auto"[\s\S]*response: "native"/);
-assert.match(source, /id: "eco"[\s\S]*acceptModelToolCalls: false[\s\S]*tools: \[\][\s\S]*toolChoice: "none"[\s\S]*response: "suppress"[\s\S]*backendRoute: "submit_instruction"/);
+assert.match(
+	source,
+	/id: "eco"[\s\S]*acceptModelToolCalls: false[\s\S]*tools: \[\][\s\S]*toolChoice: "none"[\s\S]*response: "suppress"[\s\S]*backendRoute: "submit_instruction"/,
+);
 assert.match(source, /backendSpeechContext: "isolated_update"/);
 assert.match(source, /function interactionMode/);
 assert.match(source, /function providerInteractionFor/);
@@ -27,9 +30,15 @@ assert.match(promptSource, /speak_this_verbatim/);
 assert.match(promptSource, /speak only the text inside <speak_this_verbatim>/);
 assert.match(promptSource, /Do not speak metadata/);
 assert.match(promptSource, /Do not add greetings such as 'thanks for sharing'/);
-assert.match(promptSource, /Preserve concrete facts, numbers, file paths, command names, custom type names, costs, caveats, and conclusions/);
+assert.match(
+	promptSource,
+	/Preserve concrete facts, numbers, file paths, command names, custom type names, costs, caveats, and conclusions/,
+);
 assert.match(promptSource, /Literal delivery is correct; helpful summarization is failure/);
-assert.match(promptSource, /per-response instructions tell you whether to speak that source verbatim or give a compact spoken summary/i);
+assert.match(
+	promptSource,
+	/per-response instructions tell you whether to speak that source verbatim or give a compact spoken summary/i,
+);
 assert.match(promptSource, /Summarize only the source text compactly for speech cost control/i);
 
 console.log("PASS pi-realtime interaction mode policy probe");

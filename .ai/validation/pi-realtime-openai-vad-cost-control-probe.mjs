@@ -29,7 +29,10 @@ assert.match(sessionConfig, /transcript\.replace/);
 assert.match(sessionConfig, /\.length >= 4/);
 assert.doesNotMatch(sessionConfig, /eagerness: "low"/);
 
-assert.match(openai, /buildOpenAIRealtimeAudioConfig\(\{ \.\.\.openAIRealtimeAudioInput\(interaction\), includeRawPcmFormat: true, includeRawPcmOutputFormat: true \}\)/);
+assert.match(
+	openai,
+	/buildOpenAIRealtimeAudioConfig\(\{\s*\.\.\.openAIRealtimeAudioInput\(interaction\),\s*includeRawPcmFormat: true,\s*includeRawPcmOutputFormat: true,?\s*\}\)/,
+);
 assert.match(openai, /isOpenAITranscriptActionable\(event\.transcript\)/);
 assert.match(openai, /reason: "valid_transcript"/);
 assert.match(webrtc, /audio: buildOpenAIRealtimeAudioConfig\(openAIRealtimeAudioInput\(input\.interaction\)\)/);

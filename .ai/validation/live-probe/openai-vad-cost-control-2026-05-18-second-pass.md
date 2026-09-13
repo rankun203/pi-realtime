@@ -9,7 +9,14 @@ Trace inspected:
 Config evidence from trace:
 
 ```json
-{"vadMode":"server_vad","createResponse":false,"interruptResponse":true,"noiseReduction":"near_field","serverVadThreshold":0.7,"serverVadSilenceDurationMs":700}
+{
+	"vadMode": "server_vad",
+	"createResponse": false,
+	"interruptResponse": true,
+	"noiseReduction": "near_field",
+	"serverVadThreshold": 0.7,
+	"serverVadSilenceDurationMs": 700
+}
 ```
 
 Live behavior observed:

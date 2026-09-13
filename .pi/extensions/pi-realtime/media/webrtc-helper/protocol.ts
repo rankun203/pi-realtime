@@ -1,6 +1,14 @@
 import type { DashboardBridge } from "../../dashboard";
 import type { DebugTraceRecorder } from "../../debug-trace";
-import type { ContextPacket, NormalizedProviderEvent, ProviderInteractionConfig, ProviderKind, ProviderSessionId, VoiceToolCallRecord, VoiceToolSurface } from "../../types";
+import type {
+	ContextPacket,
+	NormalizedProviderEvent,
+	ProviderInteractionConfig,
+	ProviderKind,
+	ProviderSessionId,
+	VoiceToolCallRecord,
+	VoiceToolSurface,
+} from "../../types";
 import type { UsageObservation, UsageSource } from "../../usage";
 
 export type WebRTCHelperSessionConfig = {
@@ -17,7 +25,12 @@ export type WebRTCHelperSessionConfig = {
 
 export type WebRTCHelperRegistrationConfig = WebRTCHelperSessionConfig & {
 	createClientSecret(): Promise<unknown>;
-	normalizeUsageEvent?(input: { source: UsageSource; realtimeEvent: unknown; providerEventId?: string; at?: number }): UsageObservation | undefined;
+	normalizeUsageEvent?(input: {
+		source: UsageSource;
+		realtimeEvent: unknown;
+		providerEventId?: string;
+		at?: number;
+	}): UsageObservation | undefined;
 	trace?: DebugTraceRecorder;
 };
 
@@ -29,8 +42,16 @@ export type WebRTCHelperInboundEvent =
 	| { type: "error"; message: string; recoverable?: boolean; providerEventId?: string }
 	| { type: "user_transcript"; text: string; final: boolean; providerEventId?: string }
 	| { type: "assistant_transcript"; text: string; final: boolean; providerEventId?: string }
-	| { type: "turn_signal"; signal: "speech_started" | "speech_stopped" | "waiting_for_input" | "interrupted" | "turn_complete"; providerEventId?: string }
-	| { type: "tool_call"; call: Omit<VoiceToolCallRecord, "provider" | "providerSessionId" | "status" | "createdAt">; providerEventId?: string }
+	| {
+			type: "turn_signal";
+			signal: "speech_started" | "speech_stopped" | "waiting_for_input" | "interrupted" | "turn_complete";
+			providerEventId?: string;
+	  }
+	| {
+			type: "tool_call";
+			call: Omit<VoiceToolCallRecord, "provider" | "providerSessionId" | "status" | "createdAt">;
+			providerEventId?: string;
+	  }
 	| { type: "usage"; source: UsageSource; realtimeEvent: unknown; providerEventId?: string };
 
 export type WebRTCHelperOutboundEvent = {

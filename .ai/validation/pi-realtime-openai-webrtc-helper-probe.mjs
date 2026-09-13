@@ -40,11 +40,17 @@ assert.match(openaiRuntime, /createOpenAIWebRTCMediaRuntime/);
 assert.match(openaiRuntime, /Raw OpenAI audio mode does not provide local acoustic echo cancellation/);
 assert.match(openaiRuntime, /createOpenAIWebRTCBridgeAdapter/);
 assert.match(openaiRuntime, /createWebRTCHelperServer/);
-assert.doesNotMatch(runtime, /createOpenAIWebRTCMediaRuntime|createOpenAIWebRTCBridgeAdapter|createOpenAIWebRTCClientSecret|hasOpenAIWebRTCCredentials|createWebRTCHelperServer/);
+assert.doesNotMatch(
+	runtime,
+	/createOpenAIWebRTCMediaRuntime|createOpenAIWebRTCBridgeAdapter|createOpenAIWebRTCClientSecret|hasOpenAIWebRTCCredentials|createWebRTCHelperServer/,
+);
 assert.match(service, /await this\.stopSessionMedia\(\)/);
-assert.match(service, /adapter\?\.mediaMode === "webrtc"\) await this\.stopSessionMedia\(providerSessionId\)/);
+assert.match(service, /adapter\?\.mediaMode === "webrtc"\)\s*await this\.stopSessionMedia\(providerSessionId\)/);
 assert.match(service, /!\[\.\.\.this\.adapters\.values\(\)\]\.some\(\(adapter\) => adapter\.mediaMode === "webrtc"\)/);
-assert.doesNotMatch(service, /startWebRTCHelper|stopWebRTCHelper|setOpenAIWebRTCEnabled|isOpenAIWebRTCEnabled|createOpenAIWebRTCBridgeAdapter|createWebRTCHelperServer/);
+assert.doesNotMatch(
+	service,
+	/startWebRTCHelper|stopWebRTCHelper|setOpenAIWebRTCEnabled|isOpenAIWebRTCEnabled|createOpenAIWebRTCBridgeAdapter|createWebRTCHelperServer/,
+);
 assert.doesNotMatch(commands, /isOpenAIWebRTCEnabled|startOpenAI|stopOpenAI|rawEchoWarningText/);
 assert.match(providerTypes, /mediaMode\?: "raw" \| "webrtc" \| "fake"/);
 
@@ -76,7 +82,7 @@ assert.match(protocol, /type: "usage"/);
 assert.match(protocol, /normalizeUsageEvent/);
 
 assert.match(html, /Pi Agents/);
-assert.match(html, /<details><summary>Debug events/);
+assert.match(html, /<details>\s*<summary>Debug events/);
 assert.match(html, /id="messages"/);
 assert.match(html, /id="composer"/);
 assert.match(client, /echoCancellation:\s*\{\s*ideal:\s*true\s*\}/);

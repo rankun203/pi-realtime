@@ -14,7 +14,10 @@ assert.match(usage, /gpt-realtime-2/);
 assert.match(usage, /audio: \{ input: 32, cachedInput: 0\.4, output: 64 \}/);
 assert.match(usage, /text: \{ input: 4, cachedInput: 0\.4, output: 24 \}/);
 assert.match(usage, /gpt-realtime-mini/);
-assert.match(usage, /input_transcription uses a separate transcription model\/rate card|Input transcription uses a separate transcription model\/rate card/);
+assert.match(
+	usage,
+	/input_transcription uses a separate transcription model\/rate card|Input transcription uses a separate transcription model\/rate card/,
+);
 assert.match(usage, /aggregateUsage/);
 assert.match(usage, /renderUsageSummary/);
 
@@ -44,7 +47,9 @@ assert.match(commands, /usage reset/);
 assert.match(commands, /service\.usageText/);
 assert.match(commands, /service\.resetUsage/);
 
-function dollars(total, cached, input, cachedInput) { return ((total - cached) * input + cached * cachedInput) / 1_000_000; }
+function dollars(total, cached, input, cachedInput) {
+	return ((total - cached) * input + cached * cachedInput) / 1_000_000;
+}
 assert.equal(dollars(1000, 0, 4, 0.4), 0.004);
 assert.equal(dollars(1000, 500, 4, 0.4), 0.0022);
 assert.equal(dollars(600, 0, 32, 0.4), 0.0192);

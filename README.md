@@ -55,13 +55,13 @@ In **`~/.pi/agent/settings.json`**:
 
 ```json
 {
-  "pi-realtime": {
-    "openai": {
-      "baseUrl": "https://YOUR-RESOURCE.openai.azure.com/openai/v1",
-      "authMode": "api-key",
-      "model": "gpt-realtime-2.1-mini"
-    }
-  }
+	"pi-realtime": {
+		"openai": {
+			"baseUrl": "https://YOUR-RESOURCE.openai.azure.com/openai/v1",
+			"authMode": "api-key",
+			"model": "gpt-realtime-2.1-mini"
+		}
+	}
 }
 ```
 
@@ -69,10 +69,10 @@ In **`~/.pi/agent/auth.json`**:
 
 ```json
 {
-  "pi-realtime:openai": {
-    "type": "api_key",
-    "key": "YOUR-AZURE-RESOURCE-KEY"
-  }
+	"pi-realtime:openai": {
+		"type": "api_key",
+		"key": "YOUR-AZURE-RESOURCE-KEY"
+	}
 }
 ```
 
@@ -86,10 +86,10 @@ Use the same credential entry with your OpenAI key:
 
 ```json
 {
-  "pi-realtime:openai": {
-    "type": "api_key",
-    "key": "YOUR-OPENAI-API-KEY"
-  }
+	"pi-realtime:openai": {
+		"type": "api_key",
+		"key": "YOUR-OPENAI-API-KEY"
+	}
 }
 ```
 
@@ -97,13 +97,13 @@ No realtime settings section is necessary for OpenAI defaults. If switching back
 
 ```json
 {
-  "pi-realtime": {
-    "openai": {
-      "baseUrl": "https://api.openai.com/v1",
-      "authMode": "bearer",
-      "model": "gpt-realtime-mini"
-    }
-  }
+	"pi-realtime": {
+		"openai": {
+			"baseUrl": "https://api.openai.com/v1",
+			"authMode": "bearer",
+			"model": "gpt-realtime-mini"
+		}
+	}
 }
 ```
 
@@ -124,13 +124,13 @@ chmod 600 ~/.pi/agent/auth.json ~/.pi/agent/settings.json
 
 Existing environment-variable workflows remain supported:
 
-| Variable | Setting | Default |
-| --- | --- | --- |
-| `OPENAI_BASE_URL` | `baseUrl` | `https://api.openai.com/v1` |
-| `OPENAI_AUTH_MODE` | `authMode` | `api-key` for Azure hosts, otherwise `bearer` |
-| `OPENAI_REALTIME_MODEL` | `model` | `gpt-realtime-mini` |
+| Variable                              | Setting              | Default                                                 |
+| ------------------------------------- | -------------------- | ------------------------------------------------------- |
+| `OPENAI_BASE_URL`                     | `baseUrl`            | `https://api.openai.com/v1`                             |
+| `OPENAI_AUTH_MODE`                    | `authMode`           | `api-key` for Azure hosts, otherwise `bearer`           |
+| `OPENAI_REALTIME_MODEL`               | `model`              | `gpt-realtime-mini`                                     |
 | `OPENAI_REALTIME_TRANSCRIPTION_MODEL` | `transcriptionModel` | Off in agent mode; `gpt-4o-mini-transcribe` in eco mode |
-| `OPENAI_API_KEY` | credential | No default |
+| `OPENAI_API_KEY`                      | credential           | No default                                              |
 
 For this extension, precedence is **shell environment → project `.env` → global files → defaults**. This is extension-specific; it is not Pi's core credential precedence. Project `.env` loading remains supported for compatibility, but global files are recommended when working across projects.
 
@@ -224,9 +224,9 @@ Merge a `web` section into `~/.pi/agent/settings.json`, alongside `openai`:
 
 ```json
 {
-  "pi-realtime": {
-    "web": { "port": 8787 }
-  }
+	"pi-realtime": {
+		"web": { "port": 8787 }
+	}
 }
 ```
 

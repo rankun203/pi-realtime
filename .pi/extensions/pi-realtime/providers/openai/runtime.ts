@@ -12,31 +12,74 @@ export function createOpenAIProviderRuntime(debugTraces: DebugTraceRegistry): Pr
 	const webrtcHelper = createWebRTCHelperServer();
 	return {
 		provider: "openai",
-		defaultModel() { return openAIConnectionConfig().model; },
-		availableModels() { return [...new Set([...OPENAI_REALTIME_MODELS, openAIConnectionConfig().model])]; },
+		defaultModel() {
+			return openAIConnectionConfig().model;
+		},
+		availableModels() {
+			return [...new Set([...OPENAI_REALTIME_MODELS, openAIConnectionConfig().model])];
+		},
 		behaviorProfileForModel: openAIBehaviorProfileForModel,
 		assertCredentials() {
-			if (!hasOpenAIRealtimeCredentials()) throw new Error("OPENAI_API_KEY is required to start an OpenAI realtime session.");
+			if (!hasOpenAIRealtimeCredentials())
+				throw new Error("OPENAI_API_KEY is required to start an OpenAI realtime session.");
 		},
-		createAdapter(input) { return createOpenAIRealtimeProvider(input.providerSessionId); },
+		createAdapter(input) {
+			return createOpenAIRealtimeProvider(input.providerSessionId);
+		},
 		media: { webrtc: createOpenAIWebRTCMediaRuntime({ debugTraces, webrtcHelper }) },
-		warningForPreferences(preferences) { return preferences.autoMediaMode === "webrtc" ? undefined : "Raw OpenAI audio mode does not provide local acoustic echo cancellation. Use headphones, or run /realtime webrtc on for speaker-safe browser/WebRTC audio."; },
+		warningForPreferences(preferences) {
+			return preferences.autoMediaMode === "webrtc"
+				? undefined
+				: "Raw OpenAI audio mode does not provide local acoustic echo cancellation. Use headphones, or run /realtime webrtc on for speaker-safe browser/WebRTC audio.";
+		},
 	};
 }
 
-function createOpenAIWebRTCMediaRuntime(deps: { debugTraces: DebugTraceRegistry; webrtcHelper: WebRTCHelperServer }): ProviderMediaRuntime {
+function createOpenAIWebRTCMediaRuntime(deps: {
+	debugTraces: DebugTraceRegistry;
+	webrtcHelper: WebRTCHelperServer;
+}): ProviderMediaRuntime {
 	return {
 		async start(input) {
-			if (!hasOpenAIWebRTCCredentials()) throw new Error("OPENAI_API_KEY is required to start an OpenAI WebRTC helper session.");
+			if (!hasOpenAIWebRTCCredentials())
+				throw new Error("OPENAI_API_KEY is required to start an OpenAI WebRTC helper session.");
 			await input.stopLocalMedia(input.session.providerSessionId);
 			await input.currentAdapter?.disconnect("user");
 			if (input.dashboard) deps.webrtcHelper.setDashboard?.(input.dashboard);
 			await deps.webrtcHelper.start();
 			const trace = deps.debugTraces.create(input.session.providerSessionId);
-			trace.write({ source: "provider_runtime", direction: "start_webrtc_helper", model: input.session.model, audioConfig: summarizeOpenAIRealtimeAudioConfig(openAIRealtimeAudioInput(input.interaction)) });
-			const adapter = createOpenAIWebRTCBridgeAdapter(input.session.providerSessionId, deps.webrtcHelper, () => createOpenAIWebRTCClientSecret({ model: input.session.model, instructions: input.systemPrompt, interaction: input.interaction }), trace);
+			trace.write({
+				source: "provider_runtime",
+				direction: "start_webrtc_helper",
+				model: input.session.model,
+				audioConfig: summarizeOpenAIRealtimeAudioConfig(openAIRealtimeAudioInput(input.interaction)),
+			});
+			const adapter = createOpenAIWebRTCBridgeAdapter(
+				input.session.providerSessionId,
+				deps.webrtcHelper,
+				() =>
+					createOpenAIWebRTCClientSecret({
+						model: input.session.model,
+						instructions: input.systemPrompt,
+						interaction: input.interaction,
+					}),
+				trace,
+			);
 			input.setAdapter(adapter);
-			await adapter.connect({ providerSessionId: input.session.providerSessionId, provider: "openai", model: input.session.model, personaId: input.session.personaId, systemPrompt: input.systemPrompt, toolSurface: input.surface, initialContext: input.packets[0], capabilities: { preferPassiveContext: false, preferSemanticVad: true }, interaction: input.interaction }, input.sink);
+			await adapter.connect(
+				{
+					providerSessionId: input.session.providerSessionId,
+					provider: "openai",
+					model: input.session.model,
+					personaId: input.session.personaId,
+					systemPrompt: input.systemPrompt,
+					toolSurface: input.surface,
+					initialContext: input.packets[0],
+					capabilities: { preferPassiveContext: false, preferSemanticVad: true },
+					interaction: input.interaction,
+				},
+				input.sink,
+			);
 			for (const packet of input.packets.slice(1)) await input.recordContext(packet, adapter);
 			const url = deps.webrtcHelper.urlFor(input.session.providerSessionId);
 			openHelperUrl(url);
@@ -47,7 +90,11 @@ function createOpenAIWebRTCMediaRuntime(deps: { debugTraces: DebugTraceRegistry;
 			// is intentionally coarse because the helper owns only OpenAI WebRTC media.
 			if (!providerSessionId) await deps.webrtcHelper.stop();
 		},
-		status() { return deps.webrtcHelper.status(); },
-		urlFor(providerSessionId) { return deps.webrtcHelper.urlFor(providerSessionId); },
+		status() {
+			return deps.webrtcHelper.status();
+		},
+		urlFor(providerSessionId) {
+			return deps.webrtcHelper.urlFor(providerSessionId);
+		},
 	};
 }
