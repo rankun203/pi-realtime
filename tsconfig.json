@@ -2,18 +2,12 @@
   "compilerOptions": {
     "target": "ES2022",
     "module": "ESNext",
-    "moduleResolution": "node",
-    "ignoreDeprecations": "6.0",
-    "types": [
-      "node"
-    ],
+    "moduleResolution": "Bundler",
     "strict": true,
+    "noEmit": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "esModuleInterop": true,
+    "types": ["node"]
   },
-  "include": [
-    ".pi/extensions/pi-realtime/**/*.ts",
-    ".ai/validation/**/*.ts",
-    ".ai/validation/**/*.mts"
-  ]
+  "include": [".pi/extensions/pi-realtime/**/*.ts", ".ai/validation/**/*.ts", ".ai/validation/**/*.mts"]
 }

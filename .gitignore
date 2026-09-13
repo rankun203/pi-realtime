@@ -1,6 +1,8 @@
 .env
+.env.*
+!.env.example
 node_modules/
-.pi/npm/node_modules/
+.pi/npm/
 .pi/goal-monitor/
 .pi/sessions/
 *.log
@@ -10,3 +12,6 @@ references/
 .ai/*
 !.ai/validation/
 !.ai/validation/**
+# Never publish local credentials or settings.
+auth.json
+settings.json

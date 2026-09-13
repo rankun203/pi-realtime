@@ -51,7 +51,7 @@ async function start() {
 	dc.addEventListener("close", () => postEvent({ type: "disconnected", reason: "data channel closed" }));
 	const offer = await pc.createOffer();
 	await pc.setLocalDescription(offer);
-	const answerSdp = await fetch("https://api.openai.com/v1/realtime/calls", { method: "POST", body: offer.sdp, headers: { authorization: `Bearer ${secret.value}`, "content-type": "application/sdp" } }).then(async (response) => {
+	const answerSdp = await fetch(secret.callsUrl, { method: "POST", body: offer.sdp, headers: { authorization: `Bearer ${secret.value}`, "content-type": "application/sdp" } }).then(async (response) => {
 		if (!response.ok) throw new Error(`OpenAI WebRTC calls offer failed: ${response.status} ${await response.text()}`);
 		return response.text();
 	});

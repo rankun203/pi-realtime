@@ -55,6 +55,51 @@ pi install -l .
 - A browser for the recommended WebRTC voice path.
 - `ffmpeg` and `ffplay` only for lower-level raw microphone/audio troubleshooting.
 
+## Global configuration (local Azure-compatible build)
+
+This local build automatically reads `~/.pi/agent/settings.json` and `auth.json` (or the directory set by `PI_CODING_AGENT_DIR`). Merge these entries into the existing files; do not replace other settings or credentials.
+
+`settings.json` — configuration only:
+
+```json
+{
+  "pi-realtime": {
+    "openai": {
+      "baseUrl": "https://YOUR-RESOURCE.openai.azure.com/openai/v1",
+      "authMode": "api-key",
+      "model": "gpt-realtime-2.1-mini"
+    }
+  }
+}
+```
+
+`auth.json` — a separate credential slot, leaving the coding provider untouched:
+
+```json
+{
+  "pi-realtime:openai": { "type": "api_key", "key": "YOUR-AZURE-RESOURCE-KEY" }
+}
+```
+
+Use a literal API key in this extension's auth entry. Set file permissions to `600`. The extension reads configuration when establishing connections and does not export file values into `process.env`.
+
+For realtime only, shell environment overrides project `.env`, which overrides global files. Supported overrides are `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_AUTH_MODE`, and `OPENAI_REALTIME_MODEL`. Existing session-level `/realtime openai model ...` selections override the configured default; `--model` selects a model for an individual start.
+
+Without configuration, OpenAI's `https://api.openai.com/v1`, Bearer authentication, and `gpt-realtime-mini` remain the defaults. Azure `.openai.azure.com` hosts automatically select `api-key` authentication; `authMode` explicitly overrides this for custom domains/proxies. Both HTTP and WebSocket paths use the configured endpoint. The browser receives only an ephemeral token and its matching calls URL, never the resource key.
+
+Supported speech profiles include `gpt-realtime-mini`, `gpt-realtime-2`, `gpt-realtime-2.1-mini`, and `gpt-realtime-2.1`. For Azure, `model` is the deployment name. Custom configured deployment names are also accepted; unknown names use the default behavior profile. Pricing for the 2.1 models is not guessed, so token usage is available but cost estimates may be unavailable.
+
+Start from any project:
+
+```text
+/realtime webrtc on
+/realtime start --provider openai --mode eco
+```
+
+After switching to this local package, restart Pi or run `/reload` first. The voice provider remains `openai`; Pi's coding provider is unchanged.
+
+Local validation: `pnpm run gates:typecheck` and `pnpm run gates:validation`. The npm distribution omits upstream structure-gate tooling and the original validation suite; the added tests cover configuration, auth headers, model profiles, and browser assets. The opt-in `.ai/validation/live-azure-smoke.ts` creates an ephemeral credential and short-lived WebSocket session without sending audio.
+
 ## Start an OpenAI voice session
 
 Set `OPENAI_API_KEY`:

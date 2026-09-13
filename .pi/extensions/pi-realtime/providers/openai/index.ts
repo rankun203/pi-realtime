@@ -1,4 +1,5 @@
-import { OpenAIRealtimeWebSocket } from "openai/realtime/websocket";
+import { OpenAIRealtimeWS as OpenAIRealtimeWebSocket } from "openai/realtime/ws";
+import { createOpenAIRealtimeClient, openAIConnectionConfig, openAIWebSocketOptions } from "./connection";
 import type { RealtimeClientEvent, RealtimeServerEvent } from "openai/resources/realtime/realtime";
 import type { ContextPacket, DisconnectReason, NormalizedProviderEvent, ProviderDeliveryReceipt, ProviderInteractionConfig, ProviderKind, ProviderSessionId, VoiceToolName, VoiceToolResultRecord, VoiceToolSurface } from "../../types";
 import type { ProviderConnectConfig, ProviderEventSink, RealtimeProviderAdapter, RealtimeContextPushRequest, ToolResultResponsePolicy, VoiceResponseRequest } from "../types";
@@ -33,7 +34,8 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 		this.sink = sink;
 		this.model = config.model;
 		this.interaction = config.interaction;
-		const rt = new OpenAIRealtimeWebSocket({ model: config.model });
+		const connection = openAIConnectionConfig();
+		const rt = new OpenAIRealtimeWebSocket({ model: config.model, options: openAIWebSocketOptions(connection) }, createOpenAIRealtimeClient(connection));
 		this.socket = rt;
 		rt.on("event", (event) => this.handleServerEvent(event));
 		rt.on("error", (error) => this.emit({ type: "error", message: error.message, recoverable: true }));

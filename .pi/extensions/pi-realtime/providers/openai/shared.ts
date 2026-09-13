@@ -1,10 +1,10 @@
 import type { RealtimeFunctionTool } from "openai/resources/realtime/realtime";
-import { loadProjectEnv } from "../../env";
+import { loadRealtimeEnv } from "../../env";
 import type { ContextPacket, VoiceToolName, VoiceToolSurface } from "../../types";
 
 export function hasOpenAIRealtimeCredentials(env: NodeJS.ProcessEnv = process.env): boolean {
-	loadProjectEnv(env);
-	return typeof env.OPENAI_API_KEY === "string" && env.OPENAI_API_KEY.trim().length > 0;
+	const key = loadRealtimeEnv(env).OPENAI_API_KEY?.trim();
+	return Boolean(key && key !== "REPLACE_WITH_YOUR_AZURE_API_KEY");
 }
 
 export function renderContextPacket(packet: ContextPacket): string {
