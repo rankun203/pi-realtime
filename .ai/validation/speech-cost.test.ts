@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { backendUpdateResponseEvent, backendUpdateItemEvent } from "../../.pi/extensions/pi-realtime/providers/openai/responses";
 import { providerInteractionFor } from "../../.pi/extensions/pi-realtime/domain/interaction-modes";
-import { aggregateUsage, emptyUsageBreakdown, formatUsageCost } from "../../.pi/extensions/pi-realtime/usage";
+import { aggregateUsage, emptyUsageBreakdown, formatUsageCost, estimateUsageCost } from "../../.pi/extensions/pi-realtime/usage";
 import { statusText } from "../../.pi/extensions/pi-realtime/view";
 import { createService } from "../../.pi/extensions/pi-realtime/service";
 
@@ -27,6 +27,16 @@ test("each agent speech chunk has only its own explicit input, never shared conv
  const single = { ...chunks[0], chunk: undefined };
  assert.equal((backendUpdateResponseEvent(single, providerInteractionFor("agent"), ["audio"]) as any).response.conversation, undefined);
  assert.equal((backendUpdateResponseEvent(single, providerInteractionFor("eco"), ["audio"]) as any).response.conversation, "none");
+});
+
+test("Azure Global Standard mini pricing and historical repricing", () => {
+ const observation: any = { provider: "openai", model: "gpt-realtime-2.1-mini", source: "response", input: { ...emptyUsageBreakdown(), textTokens: 1_000_000, cachedTextTokens: 500_000 }, output: { ...emptyUsageBreakdown(), textTokens: 1_000_000 }, at: 1, totalTokens: 2_000_000, estimatedCostUsd: 0, costExcludedReason: "No local pricing table for model gpt-realtime-2.1-mini." };
+ assert.equal(estimateUsageCost(observation), 2.73);
+ const summary = aggregateUsage([observation]);
+ assert.equal(summary.estimatedCostUsd, 2.73);
+ assert.equal(summary.excludedCostCount, 0);
+ assert.equal(observation.estimatedCostUsd, 0); // Immutable historical evidence.
+ assert.equal(estimateUsageCost({ ...observation, input: { ...emptyUsageBreakdown(), audioTokens: 1_000_000, cachedAudioTokens: 1_000_000 }, output: { ...emptyUsageBreakdown(), audioTokens: 1_000_000 } }), 20.3);
 });
 
 const row = (unknown: boolean): any => ({ at: 1, providerSessionId: "voice", source: "response", totalTokens: 100, input: emptyUsageBreakdown(), output: emptyUsageBreakdown(), estimatedCostUsd: unknown ? 0 : 0.012, costExcludedReason: unknown ? "No pricing for deployment" : undefined });

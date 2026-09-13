@@ -199,7 +199,7 @@ Pi's coding model/provider is selected independently with Pi's normal model cont
 
 The built-in speech profiles cover `gpt-realtime-mini`, `gpt-realtime-2`, `gpt-realtime-2.1-mini`, and `gpt-realtime-2.1`. A custom deployment configured in settings is also accepted by model selection, but an unknown name uses the default behavior profile rather than assuming which model it represents.
 
-The 2.1 models' tokens are tracked, but dollar estimates may be unavailable because their prices have not been added to the pricing table.
+`gpt-realtime-2.1-mini` now has verified Azure **Global Standard USD list estimates**, including historical observations previously marked unpriced. Per million tokens: text input/cached/output **$0.60/$0.06/$2.40**; audio **$10/$0.30/$20**; image input/cached **$0.80/$0.08**. [Azure meter evidence](.ai/validation/azure-mini-pricing.json). Data Zone, negotiated rates and actual invoices may differ. Other unknown models/custom deployment names remain explicitly unpriced rather than guessed.
 
 ## Server and phone access over HTTPS
 

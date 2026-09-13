@@ -1,0 +1,63 @@
+{
+  "source": "https://prices.azure.com/api/retail/prices?$filter=contains(meterName,%20'gpt-realtime-2.1-mini')",
+  "checkedAt": "2026-09-13T10:13:11.462Z",
+  "basis": "Global Standard USD list prices, not contractual or Data Zone billing",
+  "meters": [
+    {
+      "meterName": "gpt-realtime-2.1-mini Audio cd inp Gl 1M Tokens",
+      "retailPrice": 0.3,
+      "currencyCode": "USD",
+      "unitOfMeasure": "1M",
+      "effectiveStartDate": "2026-07-01T00:00:00Z"
+    },
+    {
+      "meterName": "gpt-realtime-2.1-mini Text opt Gl 1M Tokens",
+      "retailPrice": 2.4,
+      "currencyCode": "USD",
+      "unitOfMeasure": "1M",
+      "effectiveStartDate": "2026-07-01T00:00:00Z"
+    },
+    {
+      "meterName": "gpt-realtime-2.1-mini Audio opt Gl 1M Tokens",
+      "retailPrice": 20,
+      "currencyCode": "USD",
+      "unitOfMeasure": "1M",
+      "effectiveStartDate": "2026-07-01T00:00:00Z"
+    },
+    {
+      "meterName": "gpt-realtime-2.1-mini Text cd inp Gl 1M Tokens",
+      "retailPrice": 0.06,
+      "currencyCode": "USD",
+      "unitOfMeasure": "1M",
+      "effectiveStartDate": "2026-07-01T00:00:00Z"
+    },
+    {
+      "meterName": "gpt-realtime-2.1-mini Text inp Gl 1M Tokens",
+      "retailPrice": 0.6,
+      "currencyCode": "USD",
+      "unitOfMeasure": "1M",
+      "effectiveStartDate": "2026-07-01T00:00:00Z"
+    },
+    {
+      "meterName": "gpt-realtime-2.1-mini Audio inp Gl 1M Tokens",
+      "retailPrice": 10,
+      "currencyCode": "USD",
+      "unitOfMeasure": "1M",
+      "effectiveStartDate": "2026-07-01T00:00:00Z"
+    },
+    {
+      "meterName": "gpt-realtime-2.1-mini Image cd inp Gl 1M Tokens",
+      "retailPrice": 0.08,
+      "currencyCode": "USD",
+      "unitOfMeasure": "1M",
+      "effectiveStartDate": "2026-07-01T00:00:00Z"
+    },
+    {
+      "meterName": "gpt-realtime-2.1-mini Image inp Gl 1M Tokens",
+      "retailPrice": 0.8,
+      "currencyCode": "USD",
+      "unitOfMeasure": "1M",
+      "effectiveStartDate": "2026-07-01T00:00:00Z"
+    }
+  ]
+}

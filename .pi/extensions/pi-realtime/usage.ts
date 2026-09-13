@@ -18,7 +18,10 @@ export type UsageSummary = {
 type ModalityPricing = { input: number; cachedInput: number; output?: number };
 type ModelPricing = { text: ModalityPricing; audio: ModalityPricing; image: ModalityPricing };
 
+// USD list estimates. 2.1-mini verified against Azure Retail Prices API,
+// Global Standard (Gl), unitOfMeasure=1M. Data Zone/contract rates may differ.
 const PRICING_PER_MILLION: Record<string, ModelPricing> = {
+	"gpt-realtime-2.1-mini": { text: { input: 0.6, cachedInput: 0.06, output: 2.4 }, audio: { input: 10, cachedInput: 0.3, output: 20 }, image: { input: 0.8, cachedInput: 0.08 } },
 	"gpt-realtime-2": { text: { input: 4, cachedInput: 0.4, output: 24 }, audio: { input: 32, cachedInput: 0.4, output: 64 }, image: { input: 5, cachedInput: 0.5 } },
 	"gpt-realtime-1.5": { text: { input: 4, cachedInput: 0.4, output: 16 }, audio: { input: 32, cachedInput: 0.4, output: 64 }, image: { input: 5, cachedInput: 0.5 } },
 	"gpt-realtime-mini": { text: { input: 0.6, cachedInput: 0.06, output: 2.4 }, audio: { input: 10, cachedInput: 0.3, output: 20 }, image: { input: 0.8, cachedInput: 0.08 } },
@@ -55,8 +58,10 @@ export function aggregateUsage(observations: readonly UsageObservation[], provid
 		addBreakdown(summary.input, row.input);
 		addBreakdown(summary.output, row.output);
 		summary.totalTokens += row.totalTokens;
-		summary.estimatedCostUsd += row.estimatedCostUsd;
-		if (row.costExcludedReason) summary.excludedCostCount += 1;
+		// Reprice formerly unknown models without rewriting historical observations.
+		const newlyPriced = row.costExcludedReason?.startsWith("No local pricing table for model ") && !costExcludedReason(row);
+		summary.estimatedCostUsd += newlyPriced ? estimateUsageCost(row) : row.estimatedCostUsd;
+		if (row.costExcludedReason && !newlyPriced) summary.excludedCostCount += 1;
 		summary.lastObservedAt = Math.max(summary.lastObservedAt ?? 0, row.at);
 	}
 	return summary;
