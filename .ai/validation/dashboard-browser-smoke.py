@@ -45,6 +45,11 @@ def exercise(port):
         chat.locator(".message").first.wait_for()
         assert chat.locator("details").evaluate_all("elements => elements.every(e => !e.open)")
         assert "unsafe()" in chat.locator("#messages").inner_text()
+        # Scroll the actual long iframe conversation; controls must stay onscreen.
+        for fraction in (0.5, 1):
+            chat.locator("#messages").evaluate("(element, fraction) => window.scrollTo(0, document.documentElement.scrollHeight * fraction)", fraction)
+            for control in ("#start", "#hangup", "#message"):
+                assert chat.locator(control).evaluate("element => { const r = element.getBoundingClientRect(); return r.top >= 0 && r.bottom <= window.innerHeight; }")
         chat.locator("#message").fill("A typed message without a call")
         chat.locator("#send").click()
         chat.locator(".message").filter(has_text="Received: A typed message without a call").wait_for()

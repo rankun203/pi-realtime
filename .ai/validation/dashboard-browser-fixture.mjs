@@ -5,7 +5,7 @@ if (!process.env.PI_CODING_AGENT_DIR) throw new Error('Fixture requires an isola
 const helpers = [];
 for (const name of ['alpha', 'beta']) {
  const helper = createWebRTCHelperServer();
- const messages = [{ id: 'hello', role: 'assistant', text: `Hello from ${name}. <script>unsafe()</script>`, at: 1, source: 'Pi' }];
+ const messages = [{ id: 'hello', role: 'assistant', text: `Hello from ${name}. <script>unsafe()</script>`, at: 1, source: 'Pi' }, ...Array.from({ length: 40 }, (_, i) => ({ id: `history-${i}`, role: i % 2 ? 'user' : 'assistant', text: `Earlier conversation message ${i + 1}.`, at: i + 2, source: 'Pi' }))];
  helper.setDashboard({
   snapshot: () => ({ project: `/demo/${name}`, usage: '$0.012 est.', messages }),
   async sendMessage(text) {
