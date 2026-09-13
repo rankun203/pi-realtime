@@ -174,7 +174,9 @@ Stop with `/realtime stop`. `/reload` is only needed after installing/updating e
 
 For advanced startup, both `/realtime start --provider openai` and `/realtime openai start` honor the WebRTC preference. `/realtime webrtc on` sets the preference for future starts; to attach the browser helper to an already-active session, run `/realtime openai webrtc start`.
 
-The browser opens a **WebRTC helper** page and asks for microphone permission. The browser can apply echo cancellation, noise suppression, and automatic gain control; use headphones if your browser/device does not provide reliable echo cancellation.
+The browser opens a **WebRTC helper** chat page branded **Pi Agents**. It shows recorded Pi messages and voice replies, with technical events hidden under **Debug events**. You can type to Pi without microphone access. Tap **Start call** to enable voice; **End call** releases the microphone while keeping chat open. The browser can apply echo cancellation, noise suppression, and automatic gain control; use headphones if your browser/device does not provide reliable echo cancellation.
+
+Native agent audio does not automatically create a transcript of your spoken words. Assistant speech appears as text; user speech transcripts appear only when optional transcription is configured. Pi text messages refresh as they are recorded, not token-by-token. Voice transcripts are bounded, in-memory helper history; Pi messages follow the current session branch.
 
 Use agent mode when you want the realtime model to hear you and decide when to involve Pi. If you prefer direct transcript routing and have a working transcription model, select eco mode explicitly:
 

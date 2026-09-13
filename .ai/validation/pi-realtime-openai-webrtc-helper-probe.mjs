@@ -75,7 +75,10 @@ assert.match(protocol, /WebRTCHelperInboundEvent/);
 assert.match(protocol, /type: "usage"/);
 assert.match(protocol, /normalizeUsageEvent/);
 
-assert.match(html, /pi-realtime WebRTC helper/);
+assert.match(html, /Pi Agents/);
+assert.match(html, /<details><summary>Debug events/);
+assert.match(html, /id="messages"/);
+assert.match(html, /id="composer"/);
 assert.match(client, /echoCancellation:\s*\{\s*ideal:\s*true\s*\}/);
 assert.match(client, /noiseSuppression:\s*\{\s*ideal:\s*true\s*\}/);
 assert.match(client, /autoGainControl:\s*\{\s*ideal:\s*true\s*\}/);

@@ -30,6 +30,7 @@ function createOpenAIWebRTCMediaRuntime(deps: { debugTraces: DebugTraceRegistry;
 			if (!hasOpenAIWebRTCCredentials()) throw new Error("OPENAI_API_KEY is required to start an OpenAI WebRTC helper session.");
 			await input.stopLocalMedia(input.session.providerSessionId);
 			await input.currentAdapter?.disconnect("user");
+			if (input.dashboard) deps.webrtcHelper.setDashboard?.(input.dashboard);
 			await deps.webrtcHelper.start();
 			const trace = deps.debugTraces.create(input.session.providerSessionId);
 			trace.write({ source: "provider_runtime", direction: "start_webrtc_helper", model: input.session.model, audioConfig: summarizeOpenAIRealtimeAudioConfig(openAIRealtimeAudioInput(input.interaction)) });

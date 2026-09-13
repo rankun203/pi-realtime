@@ -1,3 +1,4 @@
+import type { DashboardBridge } from "../../dashboard";
 import type { DebugTraceRecorder } from "../../debug-trace";
 import type { ContextPacket, NormalizedProviderEvent, ProviderInteractionConfig, ProviderKind, ProviderSessionId, VoiceToolCallRecord, VoiceToolSurface } from "../../types";
 import type { UsageObservation, UsageSource } from "../../usage";
@@ -42,6 +43,7 @@ export type WebRTCHelperSink = {
 };
 
 export type WebRTCHelperServer = {
+	setDashboard?(bridge: DashboardBridge): void;
 	start(): Promise<void>;
 	stop(): Promise<void>;
 	registerSession(config: WebRTCHelperRegistrationConfig, sink: WebRTCHelperSink): void;

@@ -56,7 +56,8 @@ test("agent audio turns do not depend on transcription", async (t) => {
     document: { getElementById(id: string) { if (!elements.has(id)) elements.set(id, { textContent: "", addEventListener() {} }); return elements.get(id); } },
     location: { pathname: "/pi-realtime/openai/test" },
     fetch: () => new Promise(() => {}), // Hold auto-start; no real network.
-    clearInterval() {},
+    clearInterval() {}, setInterval() {},
+    window: { addEventListener() {} },
     sessionStorage: { getItem() { return null; }, setItem() {} },
     posts, sent,
    });

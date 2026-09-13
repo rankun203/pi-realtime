@@ -1,4 +1,6 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import { branchChatMessages } from "./dashboard";
+import { formatUsageCost } from "./usage";
 import { createAudioManager, type AudioManager, type AudioManagerErrorKind } from "./audio-manager";
 import { configChanged, contextPacketSent, nextProviderSessionId, primaryChanged, providerEventObserved, sessionStarted, sessionStopped, usageObserved, usageReset, voiceToolCallReceived, voiceToolResultSent } from "./events";
 import { createDebugTraceRegistry, describeProviderEvent } from "./debug-trace";
@@ -210,7 +212,10 @@ class RealtimeService implements Service {
 		const interaction = interactionMode(session.interactionMode);
 		const packets = this.buildPackets(ctx, providerSessionId, interaction.toolSurface);
 		const speechRendererMode = this.providers.get(session.provider)?.behaviorProfileForModel?.(session.model).backendUpdateSpeech?.rendering?.systemPromptMode;
-		return media.start({ session, ctx, surface: interaction.toolSurface, systemPrompt: interaction.systemPrompt(interaction.toolSurface, speechRendererMode), interaction: interaction.providerInteraction, sink: this.providerSink, packets, currentAdapter: this.adapters.get(providerSessionId), setAdapter: (adapter) => this.setAdapter(providerSessionId, adapter), stopLocalMedia: (id) => this.stopLocalMedia(id), recordContext: (packet, adapter) => this.recordContextPacket(providerSessionId, packet, adapter) });
+		return media.start({ session, ctx, dashboard: {
+			snapshot: () => ({ messages: branchChatMessages(ctx.sessionManager.getBranch()), project: ctx.cwd, usage: formatUsageCost(aggregateUsage(this.state().usage, providerSessionId, this.state().usageResets)) }),
+			sendMessage: async (text) => { this.controlPlane.sendChatMessage(text); },
+		}, surface: interaction.toolSurface, systemPrompt: interaction.systemPrompt(interaction.toolSurface, speechRendererMode), interaction: interaction.providerInteraction, sink: this.providerSink, packets, currentAdapter: this.adapters.get(providerSessionId), setAdapter: (adapter) => this.setAdapter(providerSessionId, adapter), stopLocalMedia: (id) => this.stopLocalMedia(id), recordContext: (packet, adapter) => this.recordContextPacket(providerSessionId, packet, adapter) });
 	}
 
 	async stopSessionMedia(providerSessionId?: ProviderSessionId): Promise<void> {

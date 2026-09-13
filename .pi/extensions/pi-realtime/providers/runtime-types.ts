@@ -1,3 +1,4 @@
+import type { DashboardBridge } from "../dashboard";
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
 import type { ContextPacket, ProviderInteractionConfig, ProviderKind, ProviderMediaMode, ProviderPreferences, ProviderSessionId, RealtimeBehaviorProfileFragment, VoiceSessionRecord, VoiceToolSurface } from "../types";
 import type { ProviderEventSink, RealtimeProviderAdapter } from "./types";
@@ -15,6 +16,7 @@ export type ProviderMediaStartInput = {
 	sink: ProviderEventSink;
 	packets: ContextPacket[];
 	currentAdapter?: RealtimeProviderAdapter;
+	dashboard?: DashboardBridge;
 	setAdapter(adapter: RealtimeProviderAdapter): void;
 	stopLocalMedia(providerSessionId: ProviderSessionId): Promise<void>;
 	recordContext(packet: ContextPacket, adapter: RealtimeProviderAdapter): Promise<void>;

@@ -1,3 +1,4 @@
+import type { ChatMessage, DashboardBridge } from "../../dashboard";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -19,6 +20,7 @@ type HelperSession = {
 	trace?: DebugTraceRecorder;
 	sink: WebRTCHelperSink;
 	outbox: WebRTCHelperOutboundEvent[];
+	messages: ChatMessage[];
 	seq: number;
 	lastSeenAt: number;
 	deliveredOutboxId: number;
@@ -32,6 +34,8 @@ export function createWebRTCHelperServer(): WebRTCHelperServer {
 class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	private server: Server | undefined;
 	private port: number | undefined;
+	private dashboard: DashboardBridge | undefined;
+	setDashboard(bridge: DashboardBridge): void { this.dashboard = bridge; }
 	private readonly sessions = new Map<ProviderSessionId, HelperSession>();
 
 	async start(): Promise<void> {
@@ -65,7 +69,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 
 	registerSession(config: WebRTCHelperRegistrationConfig, sink: WebRTCHelperSink): void {
 		const { createClientSecret, normalizeUsageEvent, trace, ...sessionConfig } = config;
-		const session = { config: { ...sessionConfig, debugTracePath: trace?.path }, createClientSecret, normalizeUsageEvent, trace, sink, outbox: [], seq: 0, lastSeenAt: Date.now(), deliveredOutboxId: 0, outboxPollTrace: createOutboxPollTraceState() };
+		const session = { config: { ...sessionConfig, debugTracePath: trace?.path }, createClientSecret, normalizeUsageEvent, trace, sink, outbox: [], messages: [], seq: 0, lastSeenAt: Date.now(), deliveredOutboxId: 0, outboxPollTrace: createOutboxPollTraceState() };
 		this.sessions.set(config.providerSessionId, session);
 		trace?.write({ source: "helper_server", direction: "lifecycle", action: "registerSession", model: config.model });
 	}
@@ -113,7 +117,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 			if (!sameOriginRequest(req)) return this.respond(res, 403, { error: "cross_origin_request_denied" });
 			await this.handleSessionRoute(req, res, url, route);
 		} catch (error) {
-			this.respond(res, 500, { error: error instanceof Error ? error.message : String(error) });
+			this.respond(res, (error as { statusCode?: number }).statusCode ?? 500, { error: error instanceof Error ? error.message : String(error) });
 		}
 	}
 
@@ -130,13 +134,24 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	}
 
 	private sessionRoute(url: URL): { providerSessionId: ProviderSessionId; action: string } | undefined {
-		const match = /^\/pi-realtime\/openai\/([^/]+)\/(config|client-secret|event|outbox)$/.exec(url.pathname);
+		const match = /^\/pi-realtime\/openai\/([^/]+)\/(config|client-secret|event|outbox|messages|message)$/.exec(url.pathname);
 		return match ? { providerSessionId: decodeURIComponent(match[1] ?? ""), action: match[2] ?? "" } : undefined;
 	}
 
 	private async handleSessionRoute(req: IncomingMessage, res: ServerResponse, url: URL, route: { providerSessionId: ProviderSessionId; action: string }): Promise<void> {
 		const session = this.requireSession(route.providerSessionId);
 		session.lastSeenAt = Date.now();
+		if (req.method === "GET" && route.action === "messages") {
+			const snapshot = this.dashboard?.snapshot() ?? { messages: [], project: "Pi", usage: "cost pending" };
+			return this.respond(res, 200, { ...snapshot, messages: [...snapshot.messages, ...session.messages].sort((a, b) => a.at - b.at).slice(-150) });
+		}
+		if (req.method === "POST" && route.action === "message") {
+			if (!this.dashboard) return this.respond(res, 503, { error: "chat_unavailable" });
+			const body = await readJson<{ text?: unknown }>(req);
+			if (typeof body.text !== "string" || !body.text.trim() || body.text.length > 20000) return this.respond(res, 400, { error: "text_required_max_20000" });
+			await this.dashboard.sendMessage(body.text.trim());
+			return this.respond(res, 202, { ok: true });
+		}
 		if (req.method === "GET" && route.action === "config") return this.respond(res, 200, { ...session.config, resumeOutboxAfter: session.deliveredOutboxId });
 		if (req.method === "POST" && route.action === "client-secret") return this.respond(res, 200, await session.createClientSecret());
 		if (req.method === "POST" && route.action === "event") return this.handleInboundEvent(req, res, session);
@@ -158,6 +173,11 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		session.trace?.write({ source: "helper_server", direction: "inbound_normalize", inboundType: inbound.type, providerEventId: inbound.providerEventId });
 		const event = this.normalize(session, inbound);
 		if (event) {
+			if ((event.type === "assistant_transcript" || event.type === "user_transcript") && event.final && event.text.trim()) {
+				const id = `voice-${event.providerEventId ?? Date.now()}`;
+				if (!session.messages.some(message => message.id === id)) session.messages.push({ id, role: event.type === "user_transcript" ? "user" : "assistant", text: event.text.slice(0, 20000), at: event.at, source: "Voice" });
+				session.messages = session.messages.slice(-100);
+			}
 			session.trace?.write({ source: "helper_server", direction: "normalized_event", eventType: event.type, providerEventId: event.providerEventId, localSeq: event.localSeq });
 			session.sink.onProviderEvent(event);
 		}
@@ -224,6 +244,11 @@ function sameOriginRequest(req: IncomingMessage): boolean {
 
 async function readJson<T>(req: IncomingMessage): Promise<T> {
 	const chunks: Buffer[] = [];
-	for await (const chunk of req) chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+	let size = 0;
+	for await (const chunk of req) {
+		size += Buffer.byteLength(chunk);
+		if (size > 256 * 1024) throw Object.assign(new Error("Request body too large"), { statusCode: 413 });
+		chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+	}
 	return JSON.parse(Buffer.concat(chunks).toString("utf8")) as T;
 }

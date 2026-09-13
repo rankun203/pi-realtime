@@ -3,6 +3,10 @@ const logEl = document.getElementById("log");
 const startButton = document.getElementById("start");
 const remoteAudio = document.getElementById("remote");
 const providerSessionId = decodeURIComponent(location.pathname.split("/").pop() || "");
+const sessionBase = location.pathname;
+let connectionEpoch = 0;
+let lastMessages = "";
+let messagePollInFlight = false;
 const outboxPollTracer = createOutboxPollTracer();
 let dc;
 let currentPc;
@@ -16,24 +20,43 @@ function outboxCursorStorageKey() {
 	return `pi-realtime:${providerSessionId}:lastOutboxId`;
 }
 
-startButton.addEventListener("click", () => start().catch((error) => reportError(error)));
-start().catch((error) => reportError(error));
+startButton.addEventListener("click", async () => {
+	startButton.disabled = true;
+	try { await start(); } catch (error) { cleanupCurrentConnection(); reportError(error); }
+	finally { startButton.disabled = Boolean(currentPc); }
+});
+document.getElementById("hangup").addEventListener("click", () => {
+	cleanupCurrentConnection();
+	setStatus("Chat ready · voice off", "status");
+	postEvent({ type: "disconnected", reason: "call ended" }).catch(reportError);
+});
+window.addEventListener("pagehide", cleanupCurrentConnection);
+document.getElementById("composer").addEventListener("submit", sendChatMessage);
+pollMessages().catch(showChatError);
+const messagePollTimer = setInterval(() => pollMessages().catch(showChatError), 1500);
+window.addEventListener("pagehide", () => clearInterval(messagePollTimer));
 
 async function start() {
 	setStatus("Connecting…", "warn");
 	cleanupCurrentConnection();
-	const config = await json(`/pi-realtime/openai/${encodeURIComponent(providerSessionId)}/config`);
+	const epoch = connectionEpoch;
+	const config = await json(`${sessionBase}/config`);
+	if (epoch !== connectionEpoch) return;
 	interactionConfig = config.interaction;
 	lastOutboxId = initialOutboxCursor(config);
-	const secret = await json(`/pi-realtime/openai/${encodeURIComponent(providerSessionId)}/client-secret`, { method: "POST" });
+	const secret = await json(`${sessionBase}/client-secret`, { method: "POST" });
+	if (epoch !== connectionEpoch) return;
 	const pc = new RTCPeerConnection();
 	currentPc = pc;
+	document.getElementById("hangup").disabled = false;
 	pc.ontrack = (event) => {
+		if (epoch !== connectionEpoch) return;
 		remoteAudio.srcObject = event.streams[0];
 		remoteAudio.play().catch(() => log("Speaker autoplay was blocked. Tap Play in the audio controls to enable sound."));
 	};
 	pc.onconnectionstatechange = () => log(`peer: ${pc.connectionState}`);
 	const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: { ideal: true }, noiseSuppression: { ideal: true }, autoGainControl: { ideal: true }, channelCount: { ideal: 1 } } });
+	if (epoch !== connectionEpoch) { for (const track of stream.getTracks()) track.stop(); return; }
 	currentStream = stream;
 	for (const track of stream.getAudioTracks()) {
 		logAudioSettings(track);
@@ -41,27 +64,33 @@ async function start() {
 	}
 	dc = pc.createDataChannel("oai-events");
 	dc.addEventListener("open", () => {
-		setStatus(`Connected: ${config.providerSessionId}`, "status");
+		if (epoch !== connectionEpoch) return;
+		setStatus(`Voice connected · ${config.model}`, "status");
 		log(`debug trace: ${config.debugTracePath || "not configured"}`);
 		postEvent({ type: "connected" });
 		sendContext(config.initialContext);
 		pollTimer = setInterval(() => pollOutbox().catch((error) => log(`poll failed: ${error.message}`)), 250);
 	});
 	dc.addEventListener("message", (event) => {
+		if (epoch !== connectionEpoch) return;
 		trace("openai_inbound_raw", { bytes: event.data.length });
 		handleRealtimeEvent(JSON.parse(event.data));
 	});
-	dc.addEventListener("close", () => postEvent({ type: "disconnected", reason: "data channel closed" }));
+	dc.addEventListener("close", () => { if (epoch === connectionEpoch) postEvent({ type: "disconnected", reason: "data channel closed" }).catch(reportError); });
 	const offer = await pc.createOffer();
 	await pc.setLocalDescription(offer);
 	const answerSdp = await fetch(secret.callsUrl, { method: "POST", body: offer.sdp, headers: { authorization: `Bearer ${secret.value}`, "content-type": "application/sdp" } }).then(async (response) => {
 		if (!response.ok) throw new Error(`OpenAI WebRTC calls offer failed: ${response.status} ${await response.text()}`);
 		return response.text();
 	});
+	if (epoch !== connectionEpoch) return;
 	await pc.setRemoteDescription({ type: "answer", sdp: answerSdp });
 }
 
 function cleanupCurrentConnection() {
+	connectionEpoch++;
+	startButton.disabled = false;
+	document.getElementById("hangup").disabled = true;
 	clearInterval(pollTimer);
 	pollTimer = undefined;
 	if (dc) dc.close();
@@ -72,6 +101,48 @@ function cleanupCurrentConnection() {
 	currentStream = undefined;
 	remoteAudio.srcObject = null;
 }
+
+async function pollMessages() {
+	if (messagePollInFlight) return;
+	messagePollInFlight = true;
+	try {
+		const snapshot = await json(`${sessionBase}/messages`);
+		document.getElementById("project").textContent = snapshot.project;
+		document.getElementById("usage").textContent = `Voice usage: ${snapshot.usage}`;
+		const serialized = JSON.stringify(snapshot.messages);
+		if (serialized === lastMessages) return;
+		lastMessages = serialized;
+		const container = document.getElementById("messages");
+		const nearBottom = window.innerHeight + window.scrollY >= document.documentElement.scrollHeight - 180;
+		container.replaceChildren();
+		for (const message of snapshot.messages) {
+			const bubble = document.createElement("article");
+			bubble.className = `message ${message.role === "user" ? "user" : "assistant"}`;
+			const label = document.createElement("span"); label.className = "label";
+			label.textContent = `${message.role === "user" ? "You" : "Assistant"} · ${message.source || "Pi"}`;
+			bubble.append(label, document.createTextNode(message.text));
+			container.append(bubble);
+		}
+		if (!snapshot.messages.length) container.textContent = "No messages yet. Send a message or start a call.";
+		if (nearBottom) window.scrollTo(0, document.documentElement.scrollHeight);
+	} finally { messagePollInFlight = false; }
+}
+
+async function sendChatMessage(event) {
+	event.preventDefault();
+	const input = document.getElementById("message");
+	const text = input.value.trim();
+	if (!text) return;
+	const button = document.getElementById("send"); button.disabled = true;
+	try {
+		await json(`${sessionBase}/message`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ text }) });
+		input.value = "";
+		document.getElementById("notice").textContent = "Sent to Pi. Replies appear as they are recorded.";
+		await pollMessages();
+	} catch (error) { showChatError(error); } finally { button.disabled = false; }
+}
+
+function showChatError(error) { document.getElementById("notice").textContent = error.message; }
 
 function logAudioSettings(track) {
 	const settings = track.getSettings ? track.getSettings() : {};
@@ -107,7 +178,9 @@ async function pollOutbox() {
 	pollInFlight = true;
 	try {
 		const after = lastOutboxId;
-		const result = await json(`/pi-realtime/openai/${encodeURIComponent(providerSessionId)}/outbox?after=${after}`);
+		const epoch = connectionEpoch;
+		const result = await json(`${sessionBase}/outbox?after=${after}`);
+		if (epoch !== connectionEpoch || !dc || dc.readyState !== "open") return;
 		const returnedIds = (result.events || []).map((item) => item.id);
 		outboxPollTracer.record(after, returnedIds);
 		for (const item of result.events || []) {
@@ -182,7 +255,7 @@ function handleHelperClose(event) {
 	setStatus(`Session stopped: ${reason}`, "warn");
 	cleanupCurrentConnection();
 	postEvent({ type: "disconnected", reason: `helper close: ${reason}` }).catch((error) => log(`disconnect post failed: ${error.message}`));
-	setTimeout(() => window.close(), 100);
+	// Keep chat/history visible when the voice session ends.
 }
 
 function sendRealtime(event, traceOptions = {}) {
@@ -194,7 +267,7 @@ function sendRealtime(event, traceOptions = {}) {
 
 async function postEvent(event, options = {}) {
 	if (options.log !== false) log(event.type);
-	await json(`/pi-realtime/openai/${encodeURIComponent(providerSessionId)}/event`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(event) });
+	await json(`${sessionBase}/event`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(event) });
 }
 
 async function json(url, options) {

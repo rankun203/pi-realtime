@@ -9,6 +9,7 @@ export type PiInstructionSink = { sendInstruction(input: VoiceInstructionInput):
 
 export type ControlPlane = {
 	instructionSink: PiInstructionSink;
+	sendChatMessage(text: string): void;
 	currentTarget(ctx: ExtensionContext): PiTargetRef;
 	observeCitations(ctx: ExtensionContext): CitationDeck;
 	sendSessionAwareness(session: VoiceSessionRecord, active: boolean): void;
@@ -17,6 +18,7 @@ export type ControlPlane = {
 export function createControlPlane(pi: ExtensionAPI, store: Store, getContext: () => ExtensionContext | undefined): ControlPlane {
 	return {
 		instructionSink: createInstructionSink(pi, store, getContext),
+		sendChatMessage(text) { pi.sendUserMessage(text, { deliverAs: "followUp" }); },
 		currentTarget,
 		observeCitations(ctx) {
 			const deck = buildCitationDeckFromBranch(ctx.sessionManager.getBranch());
