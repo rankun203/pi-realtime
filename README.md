@@ -8,6 +8,7 @@ This is a community fork of **[transcendr/pi-realtime](https://github.com/transc
 
 ## What this fork changes
 
+- **One-command voice chat:** `/realtime chat` starts agent mode and browser audio, or reuses the existing agent chat without reconnecting it.
 - **Automatic global settings:** reads the `pi-realtime.openai` section of Pi's `settings.json`.
 - **Separate realtime credentials in Pi's existing `auth.json`:** uses `pi-realtime:openai`, leaving `openai` and other coding credentials untouched.
 - **Configurable endpoint and authentication:** preserves OpenAI defaults; supports Azure `/openai/v1` endpoints and `api-key` auth for both HTTP and WebSocket connections.
@@ -153,14 +154,17 @@ Omit it to use mode defaults. `"off"` explicitly disables auxiliary transcriptio
 
 ## Start talking
 
-Inside Pi:
+After configuring your credentials once, the normal startup is just:
 
 ```text
-/realtime webrtc on
-/realtime start --provider openai --mode agent
+/realtime chat
 ```
 
-Both `/realtime start --provider openai` and `/realtime openai start` honor the WebRTC preference. `/realtime webrtc on` sets the preference for future starts; to attach the browser helper to an already-active session, run `/realtime openai webrtc start`.
+It uses your configured model for a new session, selects **agent mode**, starts the browser helper, and prints its URL. Repeating it reuses the current agent chat instead of creating another session or interrupting connected audio. It can also attach the helper to an existing raw agent session. Other sessions are left running; stop them explicitly if you no longer need them. To change an existing chat's model, stop it, change the model setting, then run `/realtime chat` again.
+
+Stop with `/realtime stop`. `/reload` is only needed after installing/updating extension code—not each time you chat. On a server, your SSH tunnel or HTTPS proxy is a separate one-time networking setup; open the printed session path through that connection.
+
+For advanced startup, both `/realtime start --provider openai` and `/realtime openai start` honor the WebRTC preference. `/realtime webrtc on` sets the preference for future starts; to attach the browser helper to an already-active session, run `/realtime openai webrtc start`.
 
 The browser opens a **WebRTC helper** page and asks for microphone permission. The browser can apply echo cancellation, noise suppression, and automatic gain control; use headphones if your browser/device does not provide reliable echo cancellation.
 
@@ -175,6 +179,7 @@ Pi's coding model/provider is selected independently with Pi's normal model cont
 ### Useful commands
 
 ```text
+/realtime chat
 /realtime status
 /realtime openai model
 /realtime openai model gpt-realtime-2.1-mini
@@ -232,12 +237,10 @@ Protect **all routes**, not just the HTML page: `/config`, `/client-secret`, `/e
 In Pi:
 
 ```text
-/realtime webrtc on
-/realtime start --provider openai --mode agent
-/realtime openai webrtc status
+/realtime chat
 ```
 
-If the helper is stopped, run `/realtime openai webrtc start`. Use the session URL shown by Pi, replacing only `http://127.0.0.1:8787` with your public HTTPS origin:
+Use the session URL shown by Pi, replacing only `http://127.0.0.1:8787` with your public HTTPS origin:
 
 ```text
 https://voice.example.com/pi-realtime/openai/SESSION_ID

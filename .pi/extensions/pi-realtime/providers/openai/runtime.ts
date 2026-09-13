@@ -47,5 +47,6 @@ function createOpenAIWebRTCMediaRuntime(deps: { debugTraces: DebugTraceRegistry;
 			if (!providerSessionId) await deps.webrtcHelper.stop();
 		},
 		status() { return deps.webrtcHelper.status(); },
+		urlFor(providerSessionId) { return deps.webrtcHelper.urlFor(providerSessionId); },
 	};
 }

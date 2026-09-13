@@ -24,6 +24,7 @@ export type ProviderMediaRuntime = {
 	start(input: ProviderMediaStartInput): Promise<string>;
 	stop(providerSessionId?: ProviderSessionId): Promise<void>;
 	status(): string;
+	urlFor?(providerSessionId: ProviderSessionId): string;
 };
 
 export type ProviderRuntime = {

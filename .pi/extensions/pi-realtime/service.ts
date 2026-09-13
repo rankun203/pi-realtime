@@ -25,6 +25,7 @@ export type Service = {
 	setDefaultModel(provider: ProviderKind, model: string): string;
 	defaultInteractionMode(): RealtimeInteractionModeId;
 	setDefaultInteractionMode(mode: RealtimeInteractionModeId): string;
+	startChat(ctx: ExtensionContext): Promise<string>;
 	startSession(input: { provider: ProviderKind; model: string; personaId?: string; primary?: boolean; interactionMode?: RealtimeInteractionModeId }, ctx: ExtensionContext): Promise<ProviderSessionId>;
 	stopSession(providerSessionId: ProviderSessionId, reason?: string): Promise<void>;
 	setPrimary(providerSessionId: ProviderSessionId | null): void;
@@ -60,6 +61,7 @@ export function createService(store: Store, controlPlane: ControlPlane): Service
 
 class RealtimeService implements Service {
 	private currentCtx: ExtensionContext | undefined;
+	private chatStart: Promise<string> | undefined;
 	private readonly adapters = new Map<ProviderSessionId, RealtimeProviderAdapter>();
 	private readonly fakeAdapters = new Map<ProviderSessionId, FakeRealtimeProviderAdapter>();
 	private readonly audioManager: AudioManager = createAudioManager((providerSessionId, kind, error) => this.handleAudioError(providerSessionId, kind, error));
@@ -183,6 +185,22 @@ class RealtimeService implements Service {
 
 	providerPreference(provider: ProviderKind): ProviderPreferences {
 		return this.store.state().config.providerPreferences[provider] ?? {};
+	}
+
+	startChat(ctx: ExtensionContext): Promise<string> {
+		this.chatStart ??= this.ensureChat(ctx).finally(() => { this.chatStart = undefined; });
+		return this.chatStart;
+	}
+
+	private async ensureChat(ctx: ExtensionContext): Promise<string> {
+		const state = this.store.state();
+		const sessions = [...state.sessions.values()].filter((session) => session.provider === "openai" && session.interactionMode === "agent" && session.status === "active");
+		const existing = sessions.find((session) => session.providerSessionId === state.primaryProviderSessionId) ?? sessions.at(-1);
+		const id = existing?.providerSessionId ?? await this.startSession({ provider: "openai", model: this.defaultModelFor("openai"), interactionMode: "agent", primary: true }, ctx);
+		const currentUrl = this.adapters.get(id)?.mediaMode === "webrtc" ? this.providers.get("openai")?.media?.webrtc?.urlFor?.(id) : undefined;
+		const url = currentUrl ?? await this.startSessionMedia(id, "webrtc", ctx);
+		this.setPrimary(id);
+		return url;
 	}
 
 	async startSessionMedia(providerSessionId: ProviderSessionId, mediaMode: ProviderMediaMode, ctx: ExtensionContext): Promise<string> {
