@@ -29,10 +29,10 @@ assert.match(sessionConfig, /transcript\.replace/);
 assert.match(sessionConfig, /\.length >= 4/);
 assert.doesNotMatch(sessionConfig, /eagerness: "low"/);
 
-assert.match(openai, /buildOpenAIRealtimeAudioConfig\(\{ includeRawPcmFormat: true, includeRawPcmOutputFormat: true \}\)/);
+assert.match(openai, /buildOpenAIRealtimeAudioConfig\(\{ \.\.\.openAIRealtimeAudioInput\(interaction\), includeRawPcmFormat: true, includeRawPcmOutputFormat: true \}\)/);
 assert.match(openai, /isOpenAITranscriptActionable\(event\.transcript\)/);
 assert.match(openai, /reason: "valid_transcript"/);
-assert.match(webrtc, /audio: buildOpenAIRealtimeAudioConfig\(\)/);
+assert.match(webrtc, /audio: buildOpenAIRealtimeAudioConfig\(openAIRealtimeAudioInput\(input\.interaction\)\)/);
 assert.match(runtime, /summarizeOpenAIRealtimeAudioConfig/);
 
 assert.match(providerTypes, /"valid_transcript"/);
@@ -42,6 +42,8 @@ assert.match(client, /reason: "empty_transcript"/);
 assert.match(client, /reason: "low_information_transcript"/);
 assert.match(client, /lexicalContentLength\(transcript\) >= 4/);
 assert.match(client, /requestResponse\("valid_transcript", event\.event_id\)/);
+assert.match(client, /transcriptHandling\?\.response !== "model"/);
+assert.match(sessionConfig, /native \? "auto_response" : "manual_response_after_turn"/);
 assert.match(client, /openai_outbound_response_create/);
 assert.match(client, /sessionStorage\.setItem\(outboxCursorStorageKey\(\), String\(value\)\)/);
 assert.match(client, /resumeOutboxAfter/);

@@ -1,4 +1,6 @@
 import type { RealtimeAudioConfig } from "openai/resources/realtime/realtime";
+import type { ProviderInteractionConfig } from "../../types";
+import { loadRealtimeEnv } from "../../env";
 
 export type OpenAINoiseReductionMode = "near_field" | "far_field" | "off";
 export type OpenAITurnControlMode = "manual_response_after_turn" | "auto_response";
@@ -11,6 +13,7 @@ export type OpenAIRealtimeAudioConfigInput = {
 	includeRawPcmFormat?: boolean;
 	includeRawPcmOutputFormat?: boolean;
 	voice?: string;
+	transcriptionModel?: string | null;
 };
 
 const DEFAULT_NOISE_REDUCTION: OpenAINoiseReductionMode = "near_field";
@@ -20,11 +23,23 @@ const DEFAULT_SERVER_VAD_THRESHOLD = 0.7;
 const DEFAULT_SERVER_VAD_SILENCE_DURATION_MS = 700;
 const DEFAULT_SERVER_VAD_PREFIX_PADDING_MS = 300;
 
+/** Agent turns are driven by native audio VAD, not auxiliary transcription. */
+export function openAIRealtimeAudioInput(interaction: ProviderInteractionConfig, env: NodeJS.ProcessEnv = process.env): OpenAIRealtimeAudioConfigInput {
+	const native = interaction.transcriptHandling.response === "native";
+	const configured = loadRealtimeEnv(env).OPENAI_REALTIME_TRANSCRIPTION_MODEL?.trim();
+	if (configured === "off" && !native) throw new Error("Eco/manual transcript routing requires a transcription model; transcriptionModel cannot be off.");
+	return {
+		turnControl: native ? "auto_response" : "manual_response_after_turn",
+		transcriptionModel: configured === "off" ? null : configured || (native ? null : "gpt-4o-mini-transcribe"),
+	};
+}
+
 export function summarizeOpenAIRealtimeAudioConfig(input: OpenAIRealtimeAudioConfigInput = {}): Record<string, unknown> {
 	const audio = buildOpenAIRealtimeAudioConfig(input);
 	const turnDetection = audio.input?.turn_detection;
 	return {
 		vadMode: turnDetection?.type,
+		transcriptionModel: audio.input?.transcription?.model ?? "off",
 		createResponse: isRecord(turnDetection) ? turnDetection.create_response : undefined,
 		interruptResponse: isRecord(turnDetection) ? turnDetection.interrupt_response : undefined,
 		noiseReduction: audio.input?.noise_reduction?.type ?? "off",
@@ -39,7 +54,7 @@ export function buildOpenAIRealtimeAudioConfig(input: OpenAIRealtimeAudioConfigI
 	return {
 		input: {
 			...(input.includeRawPcmFormat ? { format: { type: "audio/pcm", rate: 24000 } } : {}),
-			transcription: { model: "gpt-4o-mini-transcribe" },
+			...(input.transcriptionModel === null ? {} : { transcription: { model: input.transcriptionModel ?? "gpt-4o-mini-transcribe" } }),
 			...(noiseReduction === "off" ? {} : { noise_reduction: { type: noiseReduction } }),
 			turn_detection: turnDetectionConfig(input),
 		},

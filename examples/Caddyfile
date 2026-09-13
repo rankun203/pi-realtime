@@ -1,0 +1,12 @@
+# Set DNS to your server, replace the hostname and username, and generate a
+# password hash with: caddy hash-password
+# Do not put your Azure/OpenAI API key here.
+voice.example.com {
+	# Protect EVERY route, including config, client-secret, event, and outbox.
+	basic_auth {
+		YOUR_USERNAME REPLACE_WITH_CADDY_PASSWORD_HASH
+	}
+
+	# Match pi-realtime.web.port in Pi's global settings.json.
+	reverse_proxy 127.0.0.1:8787
+}

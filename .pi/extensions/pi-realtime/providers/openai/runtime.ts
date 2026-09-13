@@ -3,7 +3,7 @@ import { createWebRTCHelperServer, openHelperUrl, type WebRTCHelperServer } from
 import { createOpenAIRealtimeProvider, hasOpenAIRealtimeCredentials } from "./index";
 import { OPENAI_REALTIME_MODELS, openAIBehaviorProfileForModel } from "./model-profiles";
 import { openAIConnectionConfig } from "./connection";
-import { summarizeOpenAIRealtimeAudioConfig } from "./session-config";
+import { summarizeOpenAIRealtimeAudioConfig, openAIRealtimeAudioInput } from "./session-config";
 import { createOpenAIWebRTCClientSecret, hasOpenAIWebRTCCredentials } from "./webrtc";
 import { createOpenAIWebRTCBridgeAdapter } from "./webrtc-bridge";
 import type { ProviderMediaRuntime, ProviderRuntime } from "../runtime-types";
@@ -32,7 +32,7 @@ function createOpenAIWebRTCMediaRuntime(deps: { debugTraces: DebugTraceRegistry;
 			await input.currentAdapter?.disconnect("user");
 			await deps.webrtcHelper.start();
 			const trace = deps.debugTraces.create(input.session.providerSessionId);
-			trace.write({ source: "provider_runtime", direction: "start_webrtc_helper", model: input.session.model, audioConfig: summarizeOpenAIRealtimeAudioConfig() });
+			trace.write({ source: "provider_runtime", direction: "start_webrtc_helper", model: input.session.model, audioConfig: summarizeOpenAIRealtimeAudioConfig(openAIRealtimeAudioInput(input.interaction)) });
 			const adapter = createOpenAIWebRTCBridgeAdapter(input.session.providerSessionId, deps.webrtcHelper, () => createOpenAIWebRTCClientSecret({ model: input.session.model, instructions: input.systemPrompt, interaction: input.interaction }), trace);
 			input.setAdapter(adapter);
 			await adapter.connect({ providerSessionId: input.session.providerSessionId, provider: "openai", model: input.session.model, personaId: input.session.personaId, systemPrompt: input.systemPrompt, toolSurface: input.surface, initialContext: input.packets[0], capabilities: { preferPassiveContext: false, preferSemanticVad: true }, interaction: input.interaction }, input.sink);

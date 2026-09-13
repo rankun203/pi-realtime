@@ -14,6 +14,16 @@ export function loadRealtimeEnv(env: NodeJS.ProcessEnv = process.env, cwd = proc
 	};
 }
 
+/** Loopback HTTP port for SSH forwarding or an authenticated HTTPS reverse proxy. */
+export function loadRealtimeWebPort(env: NodeJS.ProcessEnv = process.env): number {
+	const value = loadRealtimeEnv(env).PI_REALTIME_WEB_PORT?.trim();
+	if (value === undefined) return 0;
+	if (!/^\d+$/.test(value)) throw new Error("PI_REALTIME_WEB_PORT must be an integer from 0 to 65535.");
+	const port = Number(value);
+	if (!Number.isSafeInteger(port) || port > 65535) throw new Error("PI_REALTIME_WEB_PORT must be an integer from 0 to 65535.");
+	return port;
+}
+
 function readOptionalFile(path: string): string | undefined {
 	try {
 		return readFileSync(path, "utf8");
@@ -50,11 +60,19 @@ function readRealtimeSettings(path: string): NodeJS.ProcessEnv {
 	const extension = readJsonObject(path)["pi-realtime"];
 	if (extension === undefined) return {};
 	if (!isRecord(extension)) throw new Error(`pi-realtime must be an object in ${path}.`);
-	const openai = extension.openai;
-	if (openai === undefined) return {};
-	if (!isRecord(openai)) throw new Error(`pi-realtime.openai must be an object in ${path}.`);
 	const values: NodeJS.ProcessEnv = {};
-	for (const [field, variable] of Object.entries({ baseUrl: "OPENAI_BASE_URL", authMode: "OPENAI_AUTH_MODE", model: "OPENAI_REALTIME_MODEL" })) {
+	if (extension.web !== undefined) {
+		if (!isRecord(extension.web)) throw new Error(`pi-realtime.web must be an object in ${path}.`);
+		const port = extension.web.port;
+		if (port !== undefined) {
+			if (typeof port !== "number" || !Number.isInteger(port) || port < 0 || port > 65535) throw new Error(`pi-realtime.web.port must be an integer from 0 to 65535 in ${path}.`);
+			values.PI_REALTIME_WEB_PORT = String(port);
+		}
+	}
+	const openai = extension.openai;
+	if (openai === undefined) return values;
+	if (!isRecord(openai)) throw new Error(`pi-realtime.openai must be an object in ${path}.`);
+	for (const [field, variable] of Object.entries({ baseUrl: "OPENAI_BASE_URL", authMode: "OPENAI_AUTH_MODE", model: "OPENAI_REALTIME_MODEL", transcriptionModel: "OPENAI_REALTIME_TRANSCRIPTION_MODEL" })) {
 		const value = openai[field];
 		if (value === undefined) continue;
 		if (typeof value !== "string" || !value.trim()) throw new Error(`pi-realtime.openai.${field} must be a non-empty string in ${path}.`);

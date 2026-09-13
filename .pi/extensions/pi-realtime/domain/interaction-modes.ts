@@ -14,7 +14,7 @@ const AGENT_MODE: RealtimeInteractionMode = {
 		mode: "agent",
 		tools: REQUEST_TOOL_SURFACE.tools,
 		toolChoice: "auto",
-		transcriptHandling: { response: "model", backendRoute: "none", retention: "retain" },
+		transcriptHandling: { response: "native", backendRoute: "none", retention: "retain" },
 		backendSpeechContext: "default_conversation",
 	},
 };

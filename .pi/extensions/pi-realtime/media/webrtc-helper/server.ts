@@ -1,6 +1,7 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
+import { loadRealtimeWebPort } from "../../env";
 import { createOutboxPollTraceState, describeRealtimePayload, nextOutboxPollTrace, type DebugTraceRecorder, type OutboxPollTraceState } from "../../debug-trace";
 import type { NormalizedProviderEvent, ProviderSessionId, ProviderKind } from "../../types";
 import type { WebRTCHelperInboundEvent, WebRTCHelperOutboundEvent, WebRTCHelperRegistrationConfig, WebRTCHelperServer, WebRTCHelperSessionConfig, WebRTCHelperSink } from "./protocol";
@@ -35,17 +36,21 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 
 	async start(): Promise<void> {
 		if (this.server) return;
+		const port = loadRealtimeWebPort();
 		const server = createServer((req, res) => void this.handle(req, res));
 		this.server = server;
 		await new Promise<void>((resolve, reject) => {
 			server.once("error", reject);
-			server.listen(0, HOST, () => {
+			server.listen(port, HOST, () => {
 				server.off("error", reject);
 				const address = server.address();
 				if (!address || typeof address === "string") return reject(new Error("Could not bind WebRTC helper server."));
 				this.port = address.port;
 				resolve();
 			});
+		}).catch((error) => {
+			this.server = undefined;
+			throw error;
 		});
 	}
 
@@ -105,6 +110,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 			if (this.tryServeStatic(req, res, url)) return;
 			const route = this.sessionRoute(url);
 			if (!route) return this.respond(res, 404, { error: "not_found" });
+			if (!sameOriginRequest(req)) return this.respond(res, 403, { error: "cross_origin_request_denied" });
 			await this.handleSessionRoute(req, res, url, route);
 		} catch (error) {
 			this.respond(res, 500, { error: error instanceof Error ? error.message : String(error) });
@@ -196,12 +202,25 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	}
 
 	private respond(res: ServerResponse, status: number, body: unknown): void {
-		res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store", "access-control-allow-origin": "http://127.0.0.1" });
+		res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
 		res.end(JSON.stringify(body));
 	}
 }
 
 export { openHelperUrl } from "./browser-open";
+
+// Browsers must use the helper's own origin, including behind a reverse proxy.
+// Caddy preserves the public Host header. This is CSRF protection, not authentication.
+function sameOriginRequest(req: IncomingMessage): boolean {
+	if (req.headers["sec-fetch-site"] === "cross-site") return false;
+	if (!req.headers.origin) return true; // CLI/proxy health checks and trusted local clients.
+	try {
+		const origin = new URL(req.headers.origin);
+		return (origin.protocol === "https:" || origin.protocol === "http:") && origin.host === req.headers.host;
+	} catch {
+		return false;
+	}
+}
 
 async function readJson<T>(req: IncomingMessage): Promise<T> {
 	const chunks: Buffer[] = [];

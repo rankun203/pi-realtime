@@ -5,7 +5,7 @@ import type { ContextPacket, DisconnectReason, NormalizedProviderEvent, Provider
 import type { ProviderConnectConfig, ProviderEventSink, RealtimeProviderAdapter, RealtimeContextPushRequest, ToolResultResponsePolicy, VoiceResponseRequest } from "../types";
 import { backendUpdateItemEvent, backendUpdateResponseEvent, responseCreateEvent } from "./responses";
 import { usageFromOpenAIInputTranscription, usageFromOpenAIResponseDone } from "./usage";
-import { buildOpenAIRealtimeAudioConfig, isOpenAITranscriptActionable } from "./session-config";
+import { buildOpenAIRealtimeAudioConfig, isOpenAITranscriptActionable, openAIRealtimeAudioInput } from "./session-config";
 import { hasOpenAIRealtimeCredentials, renderContextPacket, toOpenAITool } from "./shared";
 
 export { hasOpenAIRealtimeCredentials };
@@ -102,7 +102,7 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 		const surface = this.toolSurface;
 		const interaction = this.interaction;
 		if (!surface || !interaction) return;
-		this.send({ type: "session.update", session: { type: "realtime", model: this.model, instructions: this.instructions, output_modalities: [this.audioOutputEnabled ? "audio" : "text"], audio: buildOpenAIRealtimeAudioConfig({ includeRawPcmFormat: true, includeRawPcmOutputFormat: true }), tools: interaction.tools.map(toOpenAITool), tool_choice: interaction.toolChoice } } as RealtimeClientEvent);
+		this.send({ type: "session.update", session: { type: "realtime", model: this.model, instructions: this.instructions, output_modalities: [this.audioOutputEnabled ? "audio" : "text"], audio: buildOpenAIRealtimeAudioConfig({ ...openAIRealtimeAudioInput(interaction), includeRawPcmFormat: true, includeRawPcmOutputFormat: true }), tools: interaction.tools.map(toOpenAITool), tool_choice: interaction.toolChoice } } as RealtimeClientEvent);
 	}
 
 	private awaitOpen(rt: OpenAIRealtimeWebSocket): Promise<void> {
@@ -120,6 +120,9 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 			this.emit({ type: "user_transcript", text: event.transcript, final: true, providerEventId: event.event_id });
 			if (isOpenAITranscriptActionable(event.transcript) && this.interaction?.transcriptHandling.response === "model") void this.requestResponse({ reason: "valid_transcript" }).catch((error) => this.emit({ type: "error", message: error.message, recoverable: true, providerEventId: event.event_id }));
 			return;
+		}
+		if (event.type === "conversation.item.input_audio_transcription.failed") {
+			return this.emit({ type: "error", message: `Input transcription failed (${event.error?.code ?? "unknown"}): ${event.error?.message ?? "Check the configured transcription model/deployment."}`, recoverable: true, providerEventId: event.event_id });
 		}
 		if (event.type === "response.output_text.done") return this.emit({ type: "assistant_transcript", text: event.text, final: true, providerEventId: event.event_id });
 		if (event.type === "response.output_audio_transcript.done") return this.emit({ type: "assistant_transcript", text: event.transcript, final: true, providerEventId: event.event_id });

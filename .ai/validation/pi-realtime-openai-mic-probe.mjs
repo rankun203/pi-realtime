@@ -21,7 +21,7 @@ assert.doesNotMatch(audio, /throw error/);
 assert.match(providerTypes, /sendAudioInput\(audio: Buffer\)/);
 assert.match(openai, /input_audio_buffer\.append/);
 assert.match(openai, /audio\.toString\("base64"\)/);
-assert.match(openai, /buildOpenAIRealtimeAudioConfig\(\{ includeRawPcmFormat: true, includeRawPcmOutputFormat: true \}\)/);
+assert.match(openai, /buildOpenAIRealtimeAudioConfig\(\{ \.\.\.openAIRealtimeAudioInput\(interaction\), includeRawPcmFormat: true, includeRawPcmOutputFormat: true \}\)/);
 assert.match(sessionConfig, /format: \{ type: "audio\/pcm", rate: 24000 \}/);
 assert.match(sessionConfig, /DEFAULT_VAD_MODE: OpenAIVadMode = "server"/);
 assert.match(sessionConfig, /type: "server_vad"/);

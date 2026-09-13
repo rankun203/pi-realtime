@@ -17,7 +17,7 @@ export type PiTargetRef = {
 
 export type ProviderMediaMode = "raw" | "webrtc" | "none";
 export type RealtimeInteractionModeId = "agent" | "eco";
-export type TranscriptResponsePolicy = "model" | "suppress";
+export type TranscriptResponsePolicy = "model" | "native" | "suppress";
 export type TranscriptBackendRoute = "none" | "submit_instruction";
 export type TranscriptRetentionPolicy = "retain" | "delete_after_transcript";
 export type ToolChoicePolicy = "auto" | "none";

@@ -21,7 +21,8 @@
 		<p id="status" class="warn">Starting…</p>
 		<p>This page owns microphone and speaker media so the browser/WebRTC stack can apply echo cancellation, noise suppression, and automatic gain control. Keep it open while using <code>/realtime openai webrtc</code>.</p>
 		<button id="start">Start / reconnect</button>
-		<audio id="remote" autoplay></audio>
+		<p>On phones, allow microphone access and tap Play below if the browser blocks automatic sound. Keep this page in the foreground.</p>
+		<audio id="remote" autoplay controls playsinline></audio>
 		<pre id="log"></pre>
 	</main>
 	<script type="module" src="/pi-realtime/webrtc/client.js"></script>

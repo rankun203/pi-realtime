@@ -9,7 +9,7 @@ const promptSource = readFileSync(".pi/extensions/pi-realtime/prompt.ts", "utf8"
 assert.match(source, /RealtimeInteractionModeId/);
 assert.match(source, /const AGENT_MODE: RealtimeInteractionMode/);
 assert.match(source, /const ECO_MODE: RealtimeInteractionMode/);
-assert.match(source, /id: "agent"[\s\S]*acceptModelToolCalls: true[\s\S]*toolChoice: "auto"[\s\S]*response: "model"/);
+assert.match(source, /id: "agent"[\s\S]*acceptModelToolCalls: true[\s\S]*toolChoice: "auto"[\s\S]*response: "native"/);
 assert.match(source, /id: "eco"[\s\S]*acceptModelToolCalls: false[\s\S]*tools: \[\][\s\S]*toolChoice: "none"[\s\S]*response: "suppress"[\s\S]*backendRoute: "submit_instruction"/);
 assert.match(source, /backendSpeechContext: "isolated_update"/);
 assert.match(source, /function interactionMode/);

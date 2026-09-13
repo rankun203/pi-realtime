@@ -1,7 +1,7 @@
 import { createOpenAIRealtimeClient } from "./connection";
 import type { ClientSecretCreateResponse } from "openai/resources/realtime/client-secrets";
 import type { ProviderInteractionConfig } from "../../types";
-import { buildOpenAIRealtimeAudioConfig } from "./session-config";
+import { buildOpenAIRealtimeAudioConfig, openAIRealtimeAudioInput } from "./session-config";
 import { hasOpenAIRealtimeCredentials, toOpenAITool } from "./shared";
 
 /** @deprecated Use hasOpenAIRealtimeCredentials from ./shared instead. */
@@ -16,7 +16,7 @@ export async function createOpenAIWebRTCClientSecret(input: { model: string; ins
 			model: input.model,
 			instructions: input.instructions,
 			output_modalities: ["audio"],
-			audio: buildOpenAIRealtimeAudioConfig(),
+			audio: buildOpenAIRealtimeAudioConfig(openAIRealtimeAudioInput(input.interaction)),
 			tools: input.interaction.tools.map(toOpenAITool),
 			tool_choice: input.interaction.toolChoice,
 		},

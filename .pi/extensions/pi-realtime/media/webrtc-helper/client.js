@@ -28,7 +28,10 @@ async function start() {
 	const secret = await json(`/pi-realtime/openai/${encodeURIComponent(providerSessionId)}/client-secret`, { method: "POST" });
 	const pc = new RTCPeerConnection();
 	currentPc = pc;
-	pc.ontrack = (event) => { remoteAudio.srcObject = event.streams[0]; };
+	pc.ontrack = (event) => {
+		remoteAudio.srcObject = event.streams[0];
+		remoteAudio.play().catch(() => log("Speaker autoplay was blocked. Tap Play in the audio controls to enable sound."));
+	};
 	pc.onconnectionstatechange = () => log(`peer: ${pc.connectionState}`);
 	const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: { ideal: true }, noiseSuppression: { ideal: true }, autoGainControl: { ideal: true }, channelCount: { ideal: 1 } } });
 	currentStream = stream;
@@ -82,6 +85,11 @@ function handleRealtimeEvent(event) {
 	traceRealtimeEvent("openai_inbound", event);
 	if (event.type === "response.function_call_arguments.done") return postEvent({ type: "tool_call", providerEventId: event.event_id, call: { voiceToolCallId: event.call_id, providerToolCallId: event.call_id, name: event.name, arguments: parseArgs(event.arguments) } });
 	if (event.type === "conversation.item.input_audio_transcription.completed") return handleInputAudioTranscription(event);
+	if (event.type === "conversation.item.input_audio_transcription.failed") {
+		const message = `Input transcription failed (${event.error?.code || "unknown"}): ${event.error?.message || "Check the configured transcription model/deployment."}`;
+		setStatus(message, "err");
+		return postEvent({ type: "error", providerEventId: event.event_id, message, recoverable: true });
+	}
 	if (event.type === "response.output_audio_transcript.done") return postEvent({ type: "assistant_transcript", providerEventId: event.event_id, text: event.transcript || "", final: true });
 	if (event.type === "response.output_text.done") return postEvent({ type: "assistant_transcript", providerEventId: event.event_id, text: event.text || "", final: true });
 	if (event.type === "input_audio_buffer.speech_started") return postEvent({ type: "turn_signal", providerEventId: event.event_id, signal: "speech_started" });
@@ -149,8 +157,8 @@ function handleInputAudioTranscription(event) {
 		trace("response_suppressed", { reason: "low_information_transcript", providerEventId: event.event_id, itemId: event.item_id, transcriptTextLength: transcript.length, lexicalLength: lexicalContentLength(transcript) });
 		return;
 	}
-	if (interactionConfig?.transcriptHandling?.response === "suppress") {
-		trace("response_suppressed", { reason: "direct_transcript_policy", providerEventId: event.event_id, itemId: event.item_id, transcriptTextLength: transcript.length, lexicalLength: lexicalContentLength(transcript) });
+	if (interactionConfig?.transcriptHandling?.response !== "model") {
+		trace("response_suppressed", { reason: "transcript_does_not_trigger_response", policy: interactionConfig?.transcriptHandling?.response, providerEventId: event.event_id, itemId: event.item_id, transcriptTextLength: transcript.length, lexicalLength: lexicalContentLength(transcript) });
 		return;
 	}
 	requestResponse("valid_transcript", event.event_id);
@@ -231,6 +239,8 @@ function describeRealtimeEvent(event) {
 	addTextDetails(description, "functionArguments", typeof event.arguments === "string" ? event.arguments : undefined);
 	const message = event.error?.message || (typeof event.message === "string" ? event.message : undefined);
 	if (message !== undefined) description.message = message;
+	if (event.error?.code) description.errorCode = event.error.code;
+	if (event.error?.type) description.errorType = event.error.type;
 	return description;
 }
 

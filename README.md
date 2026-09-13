@@ -4,7 +4,7 @@ Talk to [Pi](https://pi.dev/) while you code: speak requests, let Pi work on you
 
 This is a community fork of **[transcendr/pi-realtime](https://github.com/transcendr/pi-realtime)**, based on upstream **v0.2.0**. It adds automatic global configuration and Azure OpenAI GA endpoint support without changing Pi's coding provider. It is not the upstream npm release or an official OpenAI/Microsoft integration.
 
-> Preview software. Azure token creation and WebSocket session configuration have been tested with `gpt-realtime-2.1-mini`. Browser microphone, speaker, interruption, and end-to-end voice behavior still require live validation. The larger 2.1 model has not been live-tested in this fork.
+> Preview software. Azure native-audio agent mode has been tested with `gpt-realtime-2.1-mini`: a synthetic spoken request triggered the `request` tool, and a test tool result was followed by generated audio, with auxiliary transcription disabled. Browser/phone microphone, speaker, interruption, and end-to-end Pi behavior still require live validation. The larger 2.1 model has not been live-tested in this fork.
 
 ## What this fork changes
 
@@ -14,6 +14,9 @@ This is a community fork of **[transcendr/pi-realtime](https://github.com/transc
 - **Configurable browser destination:** the WebRTC helper receives the calls URL associated with its ephemeral token, rather than always calling OpenAI's public endpoint. The resource API key stays server-side.
 - **Additional model profiles:** `gpt-realtime-2.1-mini` and `gpt-realtime-2.1`, plus support for a custom deployment name configured as the default model.
 - **Installed-package asset fix:** browser HTML/JavaScript resolve relative to the extension, not the project you happen to launch Pi from.
+- **Native-audio agent turns:** the realtime model responds through native turn detection and calls Pi tools, without waiting for a separate transcription service. Optional transcripts never trigger duplicate responses.
+- **Visible transcription errors:** failures such as `DeploymentNotFound` are shown in the browser and Pi rather than silently stalling eco mode.
+- **Server/phone deployment:** a configurable loopback port, mobile audio controls, and an authenticated HTTPS reverse-proxy example.
 - **Regression tests and an opt-in live connectivity check.**
 
 The original eco/agent interaction modes, transcript routing, spoken updates, and assessment of usage remain upstream features. This fork does not invent prices for the new 2.1 models.
@@ -125,6 +128,7 @@ Existing environment-variable workflows remain supported:
 | `OPENAI_BASE_URL` | `baseUrl` | `https://api.openai.com/v1` |
 | `OPENAI_AUTH_MODE` | `authMode` | `api-key` for Azure hosts, otherwise `bearer` |
 | `OPENAI_REALTIME_MODEL` | `model` | `gpt-realtime-mini` |
+| `OPENAI_REALTIME_TRANSCRIPTION_MODEL` | `transcriptionModel` | Off in agent mode; `gpt-4o-mini-transcribe` in eco mode |
 | `OPENAI_API_KEY` | credential | No default |
 
 For this extension, precedence is **shell environment → project `.env` → global files → defaults**. This is extension-specific; it is not Pi's core credential precedence. Project `.env` loading remains supported for compatibility, but global files are recommended when working across projects.
@@ -133,21 +137,35 @@ Generic exported `OPENAI_*` variables can affect other programs launched from yo
 
 Configuration files are read for new connections. Stop and restart the voice session after changing credentials or endpoints. Model selection follows: explicit `--model` → persisted `/realtime openai model ...` preference → configured model/default.
 
+## Agent mode versus eco mode
+
+**Agent mode** sends audio directly to the realtime model. Native voice activity detection triggers the model's response, and the model decides when to call Pi's `request` tool. Auxiliary transcription is off by default; it is not required for the model to understand you or call tools. Native turns can also react to background speech/noise, so use appropriate microphone settings and headphones.
+
+**Eco mode** sends completed transcripts to Pi instead of asking the realtime model to call tools. It requires a working separate transcription model. On the Azure resource used to validate this fork, `gpt-4o-mini-transcribe` failed with `DeploymentNotFound`, while `whisper-1` successfully transcribed the same sample. This is a resource-specific observation, not a claim that the model is unavailable everywhere.
+
+To select a transcription model for eco mode, or enable optional transcripts in agent mode, add this field inside `pi-realtime.openai` in global settings:
+
+```json
+"transcriptionModel": "whisper-1"
+```
+
+Omit it to use mode defaults. `"off"` explicitly disables auxiliary transcription for agent mode; it is rejected for eco mode. Agent mode still responds natively when optional transcription fails, and transcript completion never creates a second response. Keep `model` set to your **realtime deployment**—the transcription model is a separate setting.
+
 ## Start talking
 
 Inside Pi:
 
 ```text
 /realtime webrtc on
-/realtime start --provider openai --mode eco
+/realtime start --provider openai --mode agent
 ```
 
 The browser opens a **WebRTC helper** page and asks for microphone permission. The browser can apply echo cancellation, noise suppression, and automatic gain control; use headphones if your browser/device does not provide reliable echo cancellation.
 
-**Eco mode** is the recommended starting point: speech is transcribed and routed to Pi; the realtime model speaks Pi's updates. **Agent mode** lets the voice model decide when to request work from Pi:
+Use agent mode when you want the realtime model to hear you and decide when to involve Pi. If you prefer direct transcript routing and have a working transcription model, select eco mode explicitly:
 
 ```text
-/realtime start --provider openai --mode agent
+/realtime start --provider openai --mode eco
 ```
 
 Pi's coding model/provider is selected independently with Pi's normal model controls.
@@ -167,6 +185,65 @@ Pi's coding model/provider is selected independently with Pi's normal model cont
 The built-in speech profiles cover `gpt-realtime-mini`, `gpt-realtime-2`, `gpt-realtime-2.1-mini`, and `gpt-realtime-2.1`. A custom deployment configured in settings is also accepted by model selection, but an unknown name uses the default behavior profile rather than assuming which model it represents.
 
 The 2.1 models' tokens are tracked, but dollar estimates may be unavailable because their prices have not been added to the pricing table.
+
+## Server and phone access over HTTPS
+
+You can run **Pi and the realtime bridge entirely on a server** and use your phone as the microphone/speaker. An SSH tunnel is convenient for a laptop; a phone can instead open an authenticated HTTPS URL.
+
+```text
+Phone browser -- HTTPS --> authenticated reverse proxy -- loopback HTTP --> Pi helper
+Phone browser -- WebRTC audio --> OpenAI / Azure
+```
+
+The browser fetches helper routes on the same origin using relative paths, so no public-base-URL setting is required. Keep the complete `/pi-realtime/...` paths intact. The proxy carries the UI, token requests, events, and polling; audio travels directly between the phone and the provider.
+
+### 1. Give the helper a fixed local port
+
+Merge a `web` section into `~/.pi/agent/settings.json`, alongside `openai`:
+
+```json
+{
+  "pi-realtime": {
+    "web": { "port": 8787 }
+  }
+}
+```
+
+`PI_REALTIME_WEB_PORT` can override this setting (shell or project `.env`). The default `0` selects a random available port. The helper **always binds to `127.0.0.1`**, even when a fixed port is configured. Restart the helper after changing the port; use different ports for multiple Pi processes.
+
+### 2. Put authenticated HTTPS in front of it
+
+The helper itself has no public authentication layer. **Never forward it to the public Internet without authentication.** Its endpoints can expose conversation context, issue ephemeral provider credentials, and inject requests into Pi. A session URL is not an adequate access-control boundary.
+
+An example is provided in [`examples/Caddyfile`](examples/Caddyfile). On a server with Caddy installed:
+
+1. Point a hostname such as `voice.example.com` at your server.
+2. Generate a dedicated login password hash with `caddy hash-password` (interactive; avoid putting the password in shell history).
+3. Replace the example hostname, username, and password-hash placeholder in the Caddyfile. This is a **web login password**, not the Azure/OpenAI API key.
+4. Configure Caddy with that file and validate it using `caddy validate --config /path/to/Caddyfile --adapter caddyfile` before reloading it. Caddy automatically obtains and renews HTTPS certificates for a reachable hostname.
+5. Allow inbound HTTPS and the certificate validation traffic Caddy needs (normally TCP 443 and 80). **Do not open port 8787 publicly.**
+
+Protect **all routes**, not just the HTML page: `/config`, `/client-secret`, `/event`, `/outbox`, and the browser script must remain behind authentication. The helper also rejects cross-origin browser requests to session APIs; the reverse proxy must preserve the public `Host` header, as Caddy does by default. This check is CSRF protection, not a replacement for proxy authentication. Restrict access to people you trust to operate your Pi agent. An identity-aware proxy can replace Caddy's basic authentication if it protects the same routes. Use a dedicated hostname; serving beneath an extra URL prefix is not supported by the browser's root-relative paths.
+
+### 3. Open the session on your phone
+
+In Pi:
+
+```text
+/realtime webrtc on
+/realtime start --provider openai --mode agent
+/realtime openai webrtc status
+```
+
+If the helper is stopped, run `/realtime openai webrtc start`. Use the session URL shown by Pi, replacing only `http://127.0.0.1:8787` with your public HTTPS origin:
+
+```text
+https://voice.example.com/pi-realtime/openai/SESSION_ID
+```
+
+Log in at the proxy, grant microphone permission, and keep the page in the foreground. Use Safari or Chrome directly rather than an embedded app browser. Mobile browsers may block automatic playback: tap **Play** in the audio controls. The page logs a warning when autoplay is blocked. Locking the phone or backgrounding the browser can suspend audio/networking. Your phone also needs direct network access to the provider's WebRTC service.
+
+When the Pi voice session changes, open its new session URL. The fixed server port and proxy configuration can stay the same. This repository supplies deployment support and examples; it does not automatically publish your server or provision DNS/TLS/access-control credentials.
 
 ## Development
 

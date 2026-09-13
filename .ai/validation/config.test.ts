@@ -3,7 +3,8 @@ import { test } from "node:test";
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { loadRealtimeEnv } from "../../.pi/extensions/pi-realtime/env";
+import { createServer, request as httpRequest } from "node:http";
+import { loadRealtimeEnv, loadRealtimeWebPort } from "../../.pi/extensions/pi-realtime/env";
 import { createOpenAIRealtimeClient, openAIConnectionConfig, openAIWebSocketOptions } from "../../.pi/extensions/pi-realtime/providers/openai/connection";
 import { OPENAI_REALTIME_MODELS, openAIBehaviorProfileForModel } from "../../.pi/extensions/pi-realtime/providers/openai/model-profiles";
 import { createOpenAIWebRTCClientSecret } from "../../.pi/extensions/pi-realtime/providers/openai/webrtc";
@@ -24,7 +25,7 @@ function settings(openai: object) { writeFileSync(join(agentDir, "settings.json"
 test("realtime configuration and transports", async (t) => {
  process.chdir(cwd);
  process.env.PI_CODING_AGENT_DIR = agentDir;
- for (const key of ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_AUTH_MODE", "OPENAI_REALTIME_MODEL"]) delete process.env[key];
+ for (const key of ["OPENAI_API_KEY", "OPENAI_BASE_URL", "OPENAI_AUTH_MODE", "OPENAI_REALTIME_MODEL", "OPENAI_REALTIME_TRANSCRIPTION_MODEL", "PI_REALTIME_WEB_PORT"]) delete process.env[key];
  try {
   await t.test("OpenAI defaults with no files", () => {
    const config = openAIConnectionConfig();
@@ -100,11 +101,52 @@ test("realtime configuration and transports", async (t) => {
    assert.equal(openAIBehaviorProfileForModel("gpt-realtime-2.1-mini"), openAIBehaviorProfileForModel("gpt-realtime-mini"));
    assert.equal(openAIBehaviorProfileForModel("gpt-realtime-2.1"), openAIBehaviorProfileForModel("gpt-realtime-2"));
   });
+  await t.test("fixed loopback port configuration validates and can retry a failed bind", async () => {
+   assert.equal(loadRealtimeWebPort(), 0);
+   writeFileSync(join(agentDir, "settings.json"), JSON.stringify({ "pi-realtime": { web: { port: 8787 } } }));
+   assert.equal(loadRealtimeWebPort(), 8787);
+   assert.equal(loadRealtimeWebPort({ ...process.env, PI_REALTIME_WEB_PORT: "0" }), 0);
+   for (const port of ["", "-1", "65536", "1.5", "abc"]) assert.throws(() => loadRealtimeWebPort({ ...process.env, PI_REALTIME_WEB_PORT: port }), /integer/);
+   const occupied = createServer();
+   await new Promise<void>(resolve => occupied.listen(0, "127.0.0.1", resolve));
+   const port = (occupied.address() as { port: number }).port;
+   process.env.PI_REALTIME_WEB_PORT = String(port);
+   const helper = createWebRTCHelperServer();
+   try {
+    await assert.rejects(helper.start(), /EADDRINUSE/);
+    assert.equal(helper.status(), "webrtc helper: stopped");
+    await new Promise<void>(resolve => occupied.close(() => resolve()));
+    await helper.start();
+    assert.equal(new URL(helper.urlFor("test")).port, String(port));
+    assert.equal(new URL(helper.urlFor("test")).hostname, "127.0.0.1");
+   } finally {
+    occupied.close(); await helper.stop(); delete process.env.PI_REALTIME_WEB_PORT;
+    settings({ baseUrl: azure, model: "gpt-realtime-2.1-mini" });
+   }
+  });
   await t.test("browser assets work outside extension checkout", async () => {
    const helper = createWebRTCHelperServer(); await helper.start();
    try {
     const url = helper.urlFor("test");
     assert.equal((await fetch(url)).status, 200);
+    let issuedTokens = 0;
+    helper.registerSession({ provider: "openai", providerSessionId: "test", model: "test", instructions: "Test", interaction: providerInteractionFor("agent"), toolSurface: { revision: 1, tools: [] }, initialContext: {} as any, async createClientSecret() { issuedTokens++; return { value: "ek_test" }; } }, { onProviderEvent() {} });
+    const crossOriginHeaders: Record<string, string>[] = [{ origin: "https://attacker.example" }, { origin: "null" }, { "sec-fetch-site": "cross-site" }];
+    for (const headers of crossOriginHeaders) {
+     assert.equal((await fetch(url + "/client-secret", { method: "POST", headers })).status, 403);
+    }
+    assert.equal(issuedTokens, 0);
+    // A reverse proxy preserves the public Host and browser Origin headers.
+    const proxyHeaders = { host: "voice.example.com", origin: "https://voice.example.com", "sec-fetch-site": "same-origin" };
+    const proxyStatus = (action: string, method: string) => new Promise<number | undefined>((resolve, reject) => {
+     const request = httpRequest(url + action, { method, headers: proxyHeaders }, response => {
+      response.resume(); response.on("end", () => resolve(response.statusCode));
+     });
+     request.on("error", reject); request.end();
+    });
+    assert.equal(await proxyStatus("/config", "GET"), 200);
+    assert.equal(await proxyStatus("/client-secret", "POST"), 200);
+    assert.equal(issuedTokens, 1);
     const js = await fetch(new URL("/pi-realtime/webrtc/client.js", url)).then(r => r.text());
     assert.match(js, /fetch\(secret.callsUrl/); assert.ok(!js.includes("https://api.openai.com/v1/realtime/calls"));
    } finally { await helper.stop(); }
