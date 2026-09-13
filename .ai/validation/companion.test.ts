@@ -18,7 +18,12 @@ function fixture(directory = mkdtempSync(join(tmpdir(), "pi-companion-test-"))) 
 	const pi: PiSnapshot = { sessionId: "pi-session", branchId: "root", project: "/demo", busy: false, messages: [] };
 	const posted: unknown[] = [],
 		lifecycle: string[] = [],
-		connections: { sent: VoiceEvent[]; emit: (event: VoiceEvent) => void; closed: boolean }[] = [];
+		connections: {
+			sent: VoiceEvent[];
+			emit: (event: VoiceEvent) => void;
+			closed: boolean;
+			closeWait?: Promise<void>;
+		}[] = [];
 	const bridge: PiBridge = {
 		snapshot: () => pi,
 		history: (_before, limit) => pi.messages.slice(-(limit ?? 10)),
@@ -29,12 +34,13 @@ function fixture(directory = mkdtempSync(join(tmpdir(), "pi-companion-test-"))) 
 	};
 	const transport: VoiceTransport = {
 		async connect(input) {
-			const connection = { sent: [] as VoiceEvent[], emit: input.onEvent, closed: false };
+			const connection: (typeof connections)[number] = { sent: [], emit: input.onEvent, closed: false };
 			connections.push(connection);
 			return {
 				answer: "v=0\r\n",
 				send: (event) => connection.sent.push(event),
 				async close() {
+					await connection.closeWait;
 					connection.closed = true;
 				},
 			};
@@ -193,6 +199,45 @@ test("companion: branch navigation clears private context and disconnects; sessi
 		await f.companion.tick();
 		await assert.rejects(f.companion.connect("v=0"), /closed/);
 	} finally {
+		await f.cleanup();
+	}
+});
+
+test("companion: a tool arriving immediately after branch navigation cannot post into the new branch", async () => {
+	const f = fixture();
+	try {
+		await f.companion.connect("v=0");
+		f.pi.branchId = "new-branch";
+		f.connections[0].emit(tool("post_message", { message: "Stale branch instruction", origin: "user" }));
+		await settle();
+		assert.equal(f.posted.length, 0);
+		assert.ok(f.connections[0].closed);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test("companion: slow old-branch teardown cannot overwrite a fresh device's memory", async () => {
+	const f = fixture();
+	let release!: () => void;
+	try {
+		await f.companion.connect("v=0");
+		f.connections[0].closeWait = new Promise<void>((resolve) => {
+			release = resolve;
+		});
+		f.pi.branchId = "new-branch";
+		const retiring = f.companion.tick();
+		await settle();
+		const fresh = await f.companion.connect("v=0");
+		f.connections[1].emit(tool("save_voice_memory", { summary: "Fresh branch context" }));
+		await settle();
+		release();
+		await retiring;
+		await f.companion.release(fresh.lease);
+		await f.companion.connect("v=0");
+		assert.match(f.connections[2].sent[0].item.content[0].text, /Fresh branch context/);
+	} finally {
+		release?.();
 		await f.cleanup();
 	}
 });

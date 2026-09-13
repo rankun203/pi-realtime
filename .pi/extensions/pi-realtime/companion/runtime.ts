@@ -125,7 +125,7 @@ export class VoiceCompanion {
 					tools: companionTools(),
 					onEvent: (event) => this.onEvent(lease, event),
 					onClose: () => {
-						if (this.lease === lease) void this.detach();
+						if (this.lease === lease) void this.detach().catch(() => {});
 					},
 				});
 				if (this.lease !== lease || this.closed) {
@@ -208,9 +208,16 @@ export class VoiceCompanion {
 			return;
 		}
 		if (pi.branchId !== this.memory.branchId) {
-			await this.detach();
+			// Invalidate context before awaiting network teardown. A slow old close
+			// must never overwrite a newly connected device's handover.
 			this.memory = this.emptyMemory(pi);
-			this.save();
+			this.snapshot = { ...pi, messages: [...pi.messages] };
+			try {
+				this.save();
+			} finally {
+				await this.detach();
+			}
+			return;
 		}
 		const changed = pi.messages.filter((m) => !this.snapshot.messages.some((previous) => previous.id === m.id));
 		this.snapshot = { ...pi, messages: [...pi.messages] };
@@ -323,14 +330,20 @@ export class VoiceCompanion {
 		) {
 			lease.toolIds.add(event.call_id);
 			lease.toolsPending++;
-			void this.runTool(lease, event).finally(() => {
-				lease.toolsPending--;
-			});
+			void this.runTool(lease, event)
+				.catch(() => {
+					if (this.lease === lease) return this.detach();
+				})
+				.finally(() => {
+					lease.toolsPending--;
+				})
+				.catch(() => {});
 		}
 	}
 	private async runTool(lease: Lease, event: VoiceEvent): Promise<void> {
 		let result: unknown;
 		try {
+			await this.observe(); // Recheck Pi scope at execution time, not only on the polling interval.
 			const args = JSON.parse(event.arguments ?? "{}");
 			if (this.lease !== lease) return;
 			if (event.name === "post_message") {
@@ -342,6 +355,7 @@ export class VoiceCompanion {
 				)
 					throw new Error("Expected message (1–12000 characters) and origin=user|voice");
 				await this.options.bridge.postMessage(args.message, args.origin);
+				if (this.lease !== lease) return;
 				this.memory.turns.push({
 					id: `post-${event.call_id}`,
 					role: args.origin === "user" ? "user" : "assistant",

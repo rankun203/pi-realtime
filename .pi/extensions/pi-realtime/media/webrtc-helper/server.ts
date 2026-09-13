@@ -127,9 +127,21 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 						"companions",
 					),
 				onEvent: (event) => {
-					if (event.type !== "response.done" || !normalizeUsageEvent) return;
+					trace?.write({
+						source: "voice_companion",
+						eventType: event.type,
+						providerEventId: event.event_id,
+						errorCode: event.error?.code,
+					});
+					const source =
+						event.type === "response.done"
+							? "response"
+							: event.type === "conversation.item.input_audio_transcription.completed"
+								? "input_transcription"
+								: undefined;
+					if (!source || !normalizeUsageEvent) return;
 					const observation = normalizeUsageEvent({
-						source: "response",
+						source,
 						realtimeEvent: event,
 						providerEventId: event.event_id,
 						at: Date.now(),

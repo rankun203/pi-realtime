@@ -15,5 +15,9 @@ jobs:
           node-version-file: .nvmrc
       - run: corepack enable
       - run: corepack pnpm install --frozen-lockfile
+      - run: corepack pnpm format:check
       - run: corepack pnpm run gates:typecheck
       - run: corepack pnpm test
+      - uses: astral-sh/setup-uv@v6
+      - run: uv run --no-project --with playwright python -m playwright install --with-deps chromium
+      - run: uv run --no-project --with playwright python .ai/validation/companion-browser-smoke.py

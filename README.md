@@ -4,7 +4,7 @@ Talk to [Pi](https://pi.dev/) while you code: speak requests, let Pi work on you
 
 This is a community fork of **[transcendr/pi-realtime](https://github.com/transcendr/pi-realtime)**, based on upstream **v0.2.0**. It adds automatic global configuration and Azure OpenAI GA endpoint support without changing Pi's coding provider. It is not the upstream npm release or an official OpenAI/Microsoft integration.
 
-> Preview software. Azure native-audio agent mode has been tested with `gpt-realtime-2.1-mini`: a synthetic spoken request triggered the `request` tool, and a test tool result was followed by generated audio, with auxiliary transcription disabled. Browser/phone microphone, speaker, interruption, and end-to-end Pi behavior still require live validation. The larger 2.1 model has not been live-tested in this fork.
+> Preview software. The browser companion has been tested through Chromium's real WebRTC stack and Azure `gpt-realtime-2.1-mini`: synthetic speech triggered `post_message`, the real Pi SDK (with a synthetic coding model) completed work, and the voice model spoke the observed result. A second device took over and recalled the result after context restoration; provider hangup was verified. Physical microphone/speaker, Cloudflare deployment, and the larger 2.1 model remain unvalidated.
 
 ## What this fork changes
 
@@ -12,7 +12,8 @@ This is a community fork of **[transcendr/pi-realtime](https://github.com/transc
 - **Automatic global settings:** reads the `pi-realtime.openai` section of Pi's `settings.json`.
 - **Separate realtime credentials in Pi's existing `auth.json`:** uses `pi-realtime:openai`, leaving `openai` and other coding credentials untouched.
 - **Configurable endpoint and authentication:** preserves OpenAI defaults; supports Azure `/openai/v1` endpoints and `api-key` auth for both HTTP and WebSocket connections.
-- **Configurable browser destination:** the WebRTC helper receives the calls URL associated with its ephemeral token, rather than always calling OpenAI's public endpoint. The resource API key stays server-side.
+- **Server-owned browser voice companion:** one logical companion per Pi session, private voice handover, automatic observation of Pi output, bounded read-only history tools, and `post_message` for queued communication. Devices explicitly take over; disconnect/restart leaves Pi working.
+- **Server-owned provider negotiation:** the helper negotiates WebRTC and controls that same provider session through a sideband connection. Companion-mode browsers receive SDP and a device lease, not provider credentials. Legacy eco keeps its ephemeral-token path.
 - **Additional model profiles:** `gpt-realtime-2.1-mini` and `gpt-realtime-2.1`, plus support for a custom deployment name configured as the default model.
 - **Installed-package asset fix:** browser HTML/JavaScript resolve relative to the extension, not the project you happen to launch Pi from.
 - **Native-audio agent turns:** the realtime model responds through native turn detection and calls Pi tools, without waiting for a separate transcription service. Optional transcripts never trigger duplicate responses.
@@ -20,7 +21,7 @@ This is a community fork of **[transcendr/pi-realtime](https://github.com/transc
 - **Server/phone deployment:** a configurable loopback port, mobile audio controls, and an authenticated HTTPS reverse-proxy example.
 - **Regression tests and an opt-in live connectivity check.**
 
-The original eco/agent interaction modes, transcript routing, spoken updates, and assessment of usage remain upstream features. This fork does not invent prices for the new 2.1 models.
+Legacy raw/eco modes retain their upstream routing and speech-rendering behavior. Browser agent mode uses the new companion architecture, described in the [design and validation plan](apps/pi-agents/VOICE-PLAN.md). Cost estimates use verified list rates where available; unpriced models remain explicitly unknown.
 
 ## Requirements
 
@@ -275,6 +276,7 @@ nvm install 22
 nvm use 22
 corepack enable
 pnpm install --frozen-lockfile
+pnpm format:check
 pnpm run gates:typecheck
 pnpm test
 pnpm run gates:deslop
@@ -282,6 +284,8 @@ pi install .
 ```
 
 The repository retains upstream history, changelog, and validation probes. New tests cover precedence, credential isolation, URL/auth validation, HTTP headers, ephemeral-token routing, WebSocket auth options, model profiles, and browser asset resolution.
+
+`pnpm format` (or `npm run format`) applies the locally installed Prettier; `pnpm format:check` checks formatting without changing files. Commit functional changes before a project-wide formatting pass.
 
 `pnpm test` runs the fork's deterministic tests. The broader upstream `gates:validation` command is retained, but one probe references a design document absent from the upstream v0.2.0 Git tree (`.ai/docs/realtime-voice/pi-to-realtime-context-and-tool-response-policy-goal-plan.md`). The other upstream probes can be run individually with Node.
 
