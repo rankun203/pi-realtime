@@ -28,10 +28,14 @@ export function backendUpdateResponseEvent(input: RealtimeContextPushRequest, in
 }
 
 export function backendUpdateResponseShape(input: RealtimeContextPushRequest, interaction: ProviderInteractionConfig): BackendUpdateResponseShape {
+	// Queued chunks may already coexist in conversation history. Each speech
+	// response must see only its own chunk, not every pending read-verbatim task.
+	// Agent-mode history items are still retained for subsequent user turns.
+	const isolated = interaction.backendSpeechContext === "isolated_update" || input.chunk !== undefined;
 	return {
-		isolated: interaction.backendSpeechContext === "isolated_update",
-		conversation: interaction.backendSpeechContext === "isolated_update" ? "none" : undefined,
-		inputRole: interaction.backendSpeechContext === "isolated_update" ? "system" : undefined,
+		isolated,
+		conversation: isolated ? "none" : undefined,
+		inputRole: isolated ? "system" : undefined,
 		instructions: realtimeUpdateResponseInstructions(input),
 		envelopeText: renderRealtimeUpdateEnvelope(input),
 	};

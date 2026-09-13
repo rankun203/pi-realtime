@@ -5,7 +5,7 @@ import { registerPiRealtime } from "../../.pi/extensions/pi-realtime/runtime";
 import type { RealtimeState } from "../../.pi/extensions/pi-realtime/types";
 
 function state(statuses: string[]): RealtimeState {
- return { sessions: new Map(statuses.map((status, i) => [`session-${i}`, { providerSessionId: `session-${i}`, provider: "openai", model: "test", interactionMode: "agent", status }])), primaryProviderSessionId: "session-0" } as RealtimeState;
+ return { usage: [], usageResets: [], sessions: new Map(statuses.map((status, i) => [`session-${i}`, { providerSessionId: `session-${i}`, provider: "openai", model: "test", interactionMode: "agent", status }])), primaryProviderSessionId: "session-0" } as unknown as RealtimeState;
 }
 
 test("footer excludes recorded/stopped session totals", () => {

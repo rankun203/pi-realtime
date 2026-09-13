@@ -15,7 +15,7 @@ export function registerPiRealtime(pi: ExtensionAPI): void {
 	const store = createStore(pi);
 	let currentCtx: ExtensionContext | undefined;
 	const controlPlane = createControlPlane(pi, store, () => currentCtx);
-	const service = createService(store, controlPlane);
+	const service = createService(store, controlPlane, () => { if (currentCtx) syncUi(currentCtx, service); });
 	registerRealtimeMessageRenderers(pi);
 
 	pi.registerCommand("realtime", {

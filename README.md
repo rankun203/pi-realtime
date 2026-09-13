@@ -164,7 +164,11 @@ When a session is already active, starting, or stopping, `/realtime` instead sho
 
 It uses your configured model for a new session, selects **agent mode**, starts the browser helper, and prints its URL. Repeating `/realtime` shows status and options instead of creating another session or interrupting connected audio. Use `/realtime start` to attach the helper to an existing raw agent session or resume browser voice. Other sessions are left running; stop them explicitly if you no longer need them. To change an existing chat's model, stop it, change the model setting, then run `/realtime` again.
 
-The footer shows only `pi-realtime: idle` or the active-session count. Stopped sessions are kept as history, not running threads; view them with `/realtime status` instead of a persistent session-list widget.
+The extension footer shows `pi-realtime: idle` or the active-session count, plus separate voice token usage and an estimated cost once usage arrives. Unknown model/deployment prices show **cost unknown**, not zero; mixed priced/unpriced usage is labelled partial. These are local estimates, not Azure/OpenAI invoices. `/realtime usage --details` shows the breakdown; `/realtime usage reset` resets the extension's counters without deleting history.
+
+Pi's main `$… (sub)` figure is separate: it totals coding-session usage, including cached tokens and compaction. The subscription marker does not make it an invoice or an additional charge. Realtime usage is stored as extension events and is not added to that total; coding work requested through voice still counts as normal Pi work.
+
+Stopped sessions are kept as history, not running threads; view them with `/realtime status` instead of a persistent session-list widget.
 
 Stop with `/realtime stop`. `/reload` is only needed after installing/updating extension code—not each time you chat. On a server, your SSH tunnel or HTTPS proxy is a separate one-time networking setup; open the printed session path through that connection.
 

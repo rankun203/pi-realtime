@@ -55,8 +55,8 @@ export type Service = {
 	simulateFakeToolCall(providerSessionId: ProviderSessionId, name: VoiceToolName, args?: Record<string, unknown>): Promise<string>;
 	shutdown(): Promise<void>;
 };
-export function createService(store: Store, controlPlane: ControlPlane): Service {
-	return new RealtimeService(store, controlPlane);
+export function createService(store: Store, controlPlane: ControlPlane, onUsage?: () => void): Service {
+	return new RealtimeService(store, controlPlane, onUsage);
 }
 
 class RealtimeService implements Service {
@@ -69,7 +69,7 @@ class RealtimeService implements Service {
 	private readonly debugTraces = createDebugTraceRegistry();
 	private readonly providers: ProviderRuntimeRegistry = createDefaultProviderRuntimeRegistry(this.debugTraces);
 	private readonly providerSink: ProviderEventSink = { onProviderEvent: (event) => void this.handleProviderEvent(event), onProviderAudio: (chunk) => this.handleProviderAudio(chunk) };
-	constructor(private readonly store: Store, private readonly controlPlane: ControlPlane) {}
+	constructor(private readonly store: Store, private readonly controlPlane: ControlPlane, private readonly onUsage?: () => void) {}
 	refresh(ctx: ExtensionContext): void { this.currentCtx = ctx; this.store.hydrate(ctx); }
 	state(): RealtimeState { return this.store.state(); }
 	toolSurface(): VoiceToolSurface { return toolSurfaceFor(this.defaultInteractionMode()); }
@@ -376,7 +376,10 @@ class RealtimeService implements Service {
 	private async handleProviderEvent(event: NormalizedProviderEvent): Promise<void> {
 		this.traceProviderEvent(event);
 		this.store.append(providerEventObserved(event));
-		if (event.type === "usage") this.store.append(usageObserved(event.observation));
+		if (event.type === "usage") {
+			this.store.append(usageObserved(event.observation));
+			this.onUsage?.();
+		}
 		this.notifyProviderEvent(event);
 		if (event.type === "user_transcript") return this.routeTranscriptEvent(event);
 		if (event.type === "tool_call") return this.routeToolCallEvent(event.call);

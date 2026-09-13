@@ -69,6 +69,12 @@ function latestResetAt(resets: readonly UsageReset[], providerSessionId?: Provid
 	}, 0);
 }
 
+export function formatUsageCost(summary: UsageSummary): string {
+	if (summary.observations === 0) return "cost pending";
+	if (summary.excludedCostCount === summary.observations) return "cost unknown";
+	return `$${summary.estimatedCostUsd.toFixed(6)} est.${summary.excludedCostCount ? " (partial; unpriced usage excluded)" : ""}`;
+}
+
 export function renderUsageSummary(summary: UsageSummary, details = false): string {
 	if (summary.observations === 0) return `realtime usage${summary.providerSessionId ? ` for ${summary.providerSessionId}` : ""}: no usage events observed yet`;
 	const lines = [
@@ -78,7 +84,7 @@ export function renderUsageSummary(summary: UsageSummary, details = false): stri
 		`- cached input: text=${summary.input.cachedTextTokens} audio=${summary.input.cachedAudioTokens} image=${summary.input.cachedImageTokens}`,
 		`- output: text=${summary.output.textTokens} audio=${summary.output.audioTokens}`,
 		`- total tokens: ${summary.totalTokens}`,
-		`- estimated response cost: $${summary.estimatedCostUsd.toFixed(6)}${summary.excludedCostCount ? ` (${summary.excludedCostCount} event(s) excluded/unknown)` : ""}`,
+		`- estimated response cost: ${formatUsageCost(summary)}`,
 		`- last usage event: ${summary.lastObservedAt ? new Date(summary.lastObservedAt).toISOString() : "never"}`,
 	];
 	if (details) lines.push("Note: OpenAI dashboard billing is authoritative; this local estimate uses checked-in pricing constants and excludes separately billed transcription when pricing is unknown.");
