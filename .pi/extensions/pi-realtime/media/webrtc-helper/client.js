@@ -42,6 +42,7 @@ window.addEventListener("pagehide", () => clearInterval(messagePollTimer));
 async function start() {
 	setStatus("Connecting…", "warn");
 	cleanupCurrentConnection();
+	startButton.disabled = true;
 	const epoch = connectionEpoch;
 	const config = await json(`${sessionBase}/config`);
 	if (epoch !== connectionEpoch) return;
@@ -54,6 +55,7 @@ async function start() {
 	document.getElementById("hangup").disabled = false;
 	pc.ontrack = (event) => {
 		if (epoch !== connectionEpoch) return;
+		remoteAudio.hidden = false;
 		remoteAudio.srcObject = event.streams[0];
 		remoteAudio.play().catch(() => log("Speaker autoplay was blocked. Tap Play in the audio controls to enable sound."));
 	};
@@ -105,6 +107,7 @@ function cleanupCurrentConnection() {
 	currentPc = undefined;
 	currentStream = undefined;
 	remoteAudio.srcObject = null;
+	remoteAudio.hidden = true;
 }
 
 async function pollMessages() {
@@ -113,6 +116,7 @@ async function pollMessages() {
 	try {
 		const snapshot = await json(`${sessionBase}/messages`);
 		document.getElementById("project").textContent = snapshot.project;
+		document.getElementById("conversation-title").textContent = snapshot.project.split("/").filter(Boolean).pop() || "Conversation";
 		document.getElementById("usage").textContent = `Voice usage: ${snapshot.usage}`;
 		const serialized = JSON.stringify(snapshot.messages);
 		if (serialized === lastMessages) return;

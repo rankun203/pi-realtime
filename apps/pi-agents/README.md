@@ -14,7 +14,7 @@ Open `http://127.0.0.1:8877`. `PI_AGENTS_PORT` changes the port; the listener al
 
 After updating the extension, `/reload` once in each Pi and run `/realtime` (or `/realtime start` to attach browser audio to an existing session). Helpers register private metadata under `~/.pi/agent/pi-realtime/helpers/`. The dashboard verifies each live helper before listing/proxying it. `PI_CODING_AGENT_DIR` must match between Pi and the dashboard when customized. Stale/dead registrations are ignored. Selecting an agent does not start a provider connection or request the microphone.
 
-- Select an agent/project from the top picker. Each session keeps its own chat context.
+- Select an agent/project from the top picker. Switching does not copy context; voice sessions attached to the same Pi still share that Pi's current branch.
 - Type messages without granting microphone access. They are sent as ordinary Pi user messages, queued as follow-ups when busy.
 - Start/end a voice call inside the chat. Switching releases the previous page's microphone and peer connection; active calls prompt before switching.
 - Pi's recorded user/assistant text and voice replies appear in chat. Tool output, hidden reasoning and system context are excluded. Debug events are collapsed by default.
@@ -51,3 +51,12 @@ corepack pnpm test
 ```
 
 Tests cover helper chat projection, API writes and validation, transcript deduplication, registry verification, proxy path restrictions, cookie stripping, Host/Origin checks and cost estimates. Phone microphone/Cloudflare end-to-end checks still require the deployment and a real device.
+
+An optional Chromium smoke test exercises the real dashboard/helper pages at a phone-sized viewport, typed chat, safe rendering, collapsed debug events and agent switching. WebRTC is mocked (no provider charges); it also checks that ending a pending call cannot be undone by a late SDP response:
+
+```bash
+uv run --no-project --with playwright python -m playwright install chromium
+uv run --no-project --with playwright python .ai/validation/dashboard-browser-smoke.py
+```
+
+Chromium requires its normal OS libraries. The default screenshot is `/tmp/pi-agents-mobile.png`; override with `PI_AGENTS_SCREENSHOT`.

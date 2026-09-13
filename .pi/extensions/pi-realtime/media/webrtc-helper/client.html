@@ -8,11 +8,11 @@
 </style>
 </head>
 <body><main>
-<header><h1>Pi Agents</h1><button id="start">Start call</button><button id="hangup" disabled>End call</button></header>
+<header><h1 id="conversation-title">Conversation</h1><button id="start">Start call</button><button id="hangup" disabled>End call</button></header>
 <div id="project"></div><p id="status" class="status">Chat ready · voice off</p><div id="usage"></div><div id="notice" role="status"></div>
-<audio id="remote" autoplay controls playsinline></audio>
+<audio id="remote" autoplay controls playsinline hidden></audio>
 <section id="messages" aria-label="Conversation" aria-live="polite"><p class="empty">Loading messages…</p></section>
 <form id="composer"><textarea id="message" aria-label="Message" placeholder="Message this agent…" rows="2" maxlength="20000" required></textarea><button id="send" type="submit">Send</button></form>
-<p class="hint">Typing works without microphone access. Calls use native audio; your spoken words appear as text only if optional transcription is configured. Allow microphone access and tap Play if sound is blocked. Keep this page in the foreground on your phone.</p>
+<details><summary>Voice help</summary><p class="hint">Typing works without microphone access. Calls use native audio; your spoken words appear as text only if optional transcription is configured. Allow microphone access and tap Play if sound is blocked. Keep this page in the foreground on your phone.</p></details>
 <details><summary>Debug events</summary><pre id="log"></pre></details>
 </main><script type="module" src="../webrtc/client.js"></script></body></html>
