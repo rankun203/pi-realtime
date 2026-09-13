@@ -1,0 +1,10 @@
+# Configure Cloudflare Access for ALL paths on this hostname BEFORE routing DNS.
+# Replace tunnel ID, credentials path and hostname. Never commit tunnel credentials.
+tunnel: YOUR-TUNNEL-ID
+credentials-file: /path/to/YOUR-TUNNEL-ID.json
+ingress:
+  - hostname: agents.example.com
+    service: http://127.0.0.1:8877
+    originRequest:
+      httpHostHeader: agents.example.com
+  - service: http_status:404

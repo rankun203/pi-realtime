@@ -1,0 +1,17 @@
+# Copy to ~/.config/systemd/user/pi-agents.service after editing/checking paths.
+[Unit]
+Description=Pi Agents loopback dashboard
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=%h/projects/pi-realtime
+ExecStart=/usr/bin/node %h/projects/pi-realtime/apps/pi-agents/server.mjs
+Environment=PI_AGENTS_PORT=8877
+Environment=PI_AGENTS_PUBLIC_HOST=agents.example.com
+Restart=on-failure
+RestartSec=3
+UMask=0077
+
+[Install]
+WantedBy=default.target

@@ -31,6 +31,9 @@ document.getElementById("hangup").addEventListener("click", () => {
 	postEvent({ type: "disconnected", reason: "call ended" }).catch(reportError);
 });
 window.addEventListener("pagehide", cleanupCurrentConnection);
+window.addEventListener("message", (event) => {
+	if (event.origin === location.origin && event.source === window.parent && event.data?.type === "pi-agents-disconnect") cleanupCurrentConnection();
+});
 document.getElementById("composer").addEventListener("submit", sendChatMessage);
 pollMessages().catch(showChatError);
 const messagePollTimer = setInterval(() => pollMessages().catch(showChatError), 1500);
@@ -66,6 +69,7 @@ async function start() {
 	dc.addEventListener("open", () => {
 		if (epoch !== connectionEpoch) return;
 		setStatus(`Voice connected · ${config.model}`, "status");
+		window.parent.postMessage({ type: "pi-agents-call", active: true }, location.origin);
 		log(`debug trace: ${config.debugTracePath || "not configured"}`);
 		postEvent({ type: "connected" });
 		sendContext(config.initialContext);
@@ -89,6 +93,7 @@ async function start() {
 
 function cleanupCurrentConnection() {
 	connectionEpoch++;
+	window.parent.postMessage({ type: "pi-agents-call", active: false }, location.origin);
 	startButton.disabled = false;
 	document.getElementById("hangup").disabled = true;
 	clearInterval(pollTimer);

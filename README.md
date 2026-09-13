@@ -203,6 +203,10 @@ The built-in speech profiles cover `gpt-realtime-mini`, `gpt-realtime-2`, `gpt-r
 
 `gpt-realtime-2.1-mini` now has verified Azure **Global Standard USD list estimates**, including historical observations previously marked unpriced. Per million tokens: text input/cached/output **$0.60/$0.06/$2.40**; audio **$10/$0.30/$20**; image input/cached **$0.80/$0.08**. [Azure meter evidence](.ai/validation/azure-mini-pricing.json). Data Zone, negotiated rates and actual invoices may differ. Other unknown models/custom deployment names remain explicitly unpriced rather than guessed.
 
+## Pi Agents dashboard
+
+For a single bookmarked site with a project/session picker, chat messages and voice calls, run `corepack pnpm dashboard`. See [Pi Agents setup and Cloudflare Access guide](apps/pi-agents/README.md). The dashboard discovers helper-enabled Pi sessions on this server and proxies them through one **loopback-only** port, `8877`. No public deployment is created automatically.
+
 ## Server and phone access over HTTPS
 
 You can run **Pi and the realtime bridge entirely on a server** and use your phone as the microphone/speaker. An SSH tunnel is convenient for a laptop; a phone can instead open an authenticated HTTPS URL.

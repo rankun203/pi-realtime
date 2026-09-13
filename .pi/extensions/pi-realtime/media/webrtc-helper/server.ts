@@ -1,3 +1,4 @@
+import { createHelperDiscovery } from "./discovery";
 import type { ChatMessage, DashboardBridge } from "../../dashboard";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import { readFileSync } from "node:fs";
@@ -37,6 +38,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	private dashboard: DashboardBridge | undefined;
 	setDashboard(bridge: DashboardBridge): void { this.dashboard = bridge; }
 	private readonly sessions = new Map<ProviderSessionId, HelperSession>();
+	private readonly discovery = createHelperDiscovery();
 
 	async start(): Promise<void> {
 		if (this.server) return;
@@ -62,6 +64,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		const server = this.server;
 		if (!server) return;
 		this.sessions.clear();
+		this.discovery.remove();
 		await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
 		this.server = undefined;
 		this.port = undefined;
@@ -71,6 +74,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		const { createClientSecret, normalizeUsageEvent, trace, ...sessionConfig } = config;
 		const session = { config: { ...sessionConfig, debugTracePath: trace?.path }, createClientSecret, normalizeUsageEvent, trace, sink, outbox: [], messages: [], seq: 0, lastSeenAt: Date.now(), deliveredOutboxId: 0, outboxPollTrace: createOutboxPollTraceState() };
 		this.sessions.set(config.providerSessionId, session);
+		if (this.port) this.discovery.publish(this.port);
 		trace?.write({ source: "helper_server", direction: "lifecycle", action: "registerSession", model: config.model });
 	}
 
@@ -111,6 +115,10 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
 		try {
 			const url = new URL(req.url ?? "/", `http://${HOST}`);
+			if (req.method === "GET" && url.pathname === "/pi-realtime/discovery") {
+				if (!sameOriginRequest(req)) return this.respond(res, 403, { error: "cross_origin_request_denied" });
+				return this.respond(res, 200, { id: this.discovery.id, project: this.dashboard?.snapshot().project ?? process.cwd(), sessions: [...this.sessions.values()].map(session => ({ id: session.config.providerSessionId, model: session.config.model, mode: session.config.interaction?.mode ?? "agent" })) });
+			}
 			if (this.tryServeStatic(req, res, url)) return;
 			const route = this.sessionRoute(url);
 			if (!route) return this.respond(res, 404, { error: "not_found" });
