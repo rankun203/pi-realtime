@@ -6,7 +6,7 @@ import { registerRealtimeMessageRenderers } from "./messages";
 import { createService, type Service } from "./service";
 import { createStore, type Store } from "./store";
 import { registerRealtimeModelTools } from "./tools/pi";
-import { renderWidget, statusText } from "./view";
+import { statusText } from "./view";
 
 const STATUS_KEY = "pi-realtime";
 const WIDGET_KEY = "pi-realtime.widget";
@@ -54,5 +54,7 @@ function hydrate(ctx: ExtensionContext, store: Store, service: Service): void {
 function syncUi(ctx: ExtensionContext, service: Service): void {
 	const state = service.state();
 	ctx.ui.setStatus(STATUS_KEY, statusText(state));
-	ctx.ui.setWidget(WIDGET_KEY, renderWidget(state));
+	// Clear the legacy session-list widget, including after /reload.
+	// History remains available on demand through /realtime status.
+	ctx.ui.setWidget(WIDGET_KEY, undefined);
 }

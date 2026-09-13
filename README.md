@@ -162,6 +162,8 @@ After configuring your credentials once, the normal startup is just:
 
 It uses your configured model for a new session, selects **agent mode**, starts the browser helper, and prints its URL. Repeating it reuses the current agent chat instead of creating another session or interrupting connected audio. It can also attach the helper to an existing raw agent session. Other sessions are left running; stop them explicitly if you no longer need them. To change an existing chat's model, stop it, change the model setting, then run `/realtime chat` again.
 
+The footer shows only `pi-realtime: idle` or the active-session count. Stopped sessions are kept as history, not running threads; view them with `/realtime status` instead of a persistent session-list widget.
+
 Stop with `/realtime stop`. `/reload` is only needed after installing/updating extension code—not each time you chat. On a server, your SSH tunnel or HTTPS proxy is a separate one-time networking setup; open the printed session path through that connection.
 
 For advanced startup, both `/realtime start --provider openai` and `/realtime openai start` honor the WebRTC preference. `/realtime webrtc on` sets the preference for future starts; to attach the browser helper to an already-active session, run `/realtime openai webrtc start`.
