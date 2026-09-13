@@ -8,6 +8,7 @@ function fixture(autoMediaMode?: string) {
  const ctx = { ui: { notify(text: string, level?: string) { messages.push({ text, level }); } } } as any;
  const service = {
   refresh() {},
+  state() { return { sessions: new Map() }; },
   defaultModelFor() { return "test-deployment"; },
   defaultInteractionMode() { return "eco"; },
   providerPreference() { return { autoMediaMode }; },
@@ -62,7 +63,33 @@ test("explicit status and help never start voice", async () => {
  await handleRealtimeCommand("help", f.ctx, f.service);
  assert.equal(f.calls.length, 0);
  assert.equal(f.messages[0].text, "session history");
- assert.match(f.messages[1].text, /\/realtime \(or \/realtime start\)/);
+ assert.match(f.messages[1].text, /start voice when idle; otherwise show status and options/);
+});
+
+test("bare command shows status and options without starting or reconnecting live sessions", async () => {
+ for (const status of ["active", "starting", "stopping"]) {
+  for (const command of ["", "  "]) {
+   const f = fixture();
+   f.service.state = () => ({ sessions: new Map([["existing", { status }]]) });
+   f.service.statusText = () => `existing session: ${status}`;
+   f.service.mediaStatus = () => "browser helper status";
+   f.service.startChat = async () => { throw new Error("must not start or reconnect"); };
+   await handleRealtimeCommand(command, f.ctx, f.service);
+   assert.equal(f.calls.length, 0);
+   assert.equal(f.messages.length, 1);
+   assert.match(f.messages[0].text, /existing session:/);
+   assert.match(f.messages[0].text, /browser helper status/);
+   assert.match(f.messages[0].text, /Options:[\s\S]*\/realtime stop[\s\S]*\/realtime help/);
+  }
+ }
+});
+
+test("stopped and failed history does not prevent bare command starting voice", async () => {
+ const f = fixture();
+ f.service.state = () => ({ sessions: new Map([["old", { status: "stopped" }], ["failed", { status: "error" }]]) });
+ f.service.startChat = async () => { f.calls.push("chat"); return "test-url"; };
+ await handleRealtimeCommand("", f.ctx, f.service);
+ assert.deepEqual(f.calls, ["chat"]);
 });
 
 function chatServiceFixture() {

@@ -27,6 +27,9 @@ const REALTIME_COMMANDS: Record<string, RealtimeCommandHandler> = {
 export async function handleRealtimeCommand(args: string, ctx: ExtensionCommandContext, service: Service): Promise<void> {
 	service.refresh(ctx);
 	const tokens = tokenize(args);
+	if (tokens.length === 0 && [...service.state().sessions.values()].some((session) => session.status === "active" || session.status === "starting" || session.status === "stopping")) {
+		return notify(ctx, [service.statusText(), service.mediaStatus(), "Options:", "/realtime stop — stop the primary session", "/realtime start — start or resume browser voice", "/realtime status — session history", "/realtime usage — usage summary", "/realtime help — all commands"].join("\n"));
+	}
 	const [cmd = "start", ...rest] = tokens;
 	const handler = REALTIME_COMMANDS[cmd];
 	if (!handler) return notify(ctx, `Unknown /realtime command: ${cmd}\n${helpText()}`, "warning");
@@ -296,7 +299,8 @@ function helpText(): string {
 		"/realtime audio start|stop|status — play provider audio from the primary session",
 		"/realtime webrtc on|off — persistently toggle OpenAI WebRTC auto-launch",
 		"/realtime openai [start|stop] — toggle/start/stop OpenAI; start launches WebRTC when enabled",
-		"/realtime (or /realtime start) — start or reuse agent-mode browser voice chat",
+		"/realtime — start voice when idle; otherwise show status and options",
+		"/realtime start — start or reuse agent-mode browser voice chat",
 		"/realtime status — show session history without starting voice",
 		"/realtime openai model [gpt-realtime-mini|gpt-realtime-2] — show or set the default OpenAI realtime model for future sessions",
 		"/realtime openai text <message> — send text to the active OpenAI session",
