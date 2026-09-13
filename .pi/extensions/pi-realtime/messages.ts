@@ -23,6 +23,7 @@ export function renderRealtimeRequestMessage(input: VoiceInstructionInput): stri
 }
 
 export function renderRealtimeSessionMessage(session: VoiceSessionRecord, active: boolean): string {
+	if (active && session.interactionMode === "agent") return `Voice companion available for ${session.providerSessionId}. It observes ordinary visible Pi output and independently chooses what to say. Continue working normally; no acknowledgement or realtime_send_* tools are needed for companion messages. Voice lifecycle changes do not interrupt work.`;
 	return active
 		? `Realtime voice interface is active for session ${session.providerSessionId} (${session.provider}/${session.model}, mode=${session.interactionMode}). This is non-turn-triggering session context for the next real Pi turn. If incoming work is delivered as a realtime request, actively use realtime_send_ack, realtime_send_status, and realtime_send_text as the main communication path back to the voice interface.`
 		: `Realtime voice interface stopped for session ${session.providerSessionId} (${session.provider}/${session.model}, mode=${session.interactionMode}). This is non-turn-triggering session context for the next real Pi turn. Realtime is not currently active unless another realtime session is explicitly reported active. Do not use realtime_send_* unless realtime_status shows a live target.`;

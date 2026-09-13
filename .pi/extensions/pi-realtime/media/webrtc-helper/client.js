@@ -15,6 +15,10 @@ let lastOutboxId = 0;
 let pollTimer;
 let pollInFlight = false;
 let interactionConfig;
+let companionMode = false;
+let voiceLease;
+let voiceHeartbeat;
+let voiceHeartbeatInFlight = false;
 
 function outboxCursorStorageKey() {
 	return `pi-realtime:${providerSessionId}:lastOutboxId`;
@@ -47,6 +51,8 @@ async function start() {
 	const config = await json(`${sessionBase}/config`);
 	if (epoch !== connectionEpoch) return;
 	interactionConfig = config.interaction;
+	companionMode = Boolean(config.companion);
+	if (companionMode) return startCompanion(config, epoch);
 	lastOutboxId = initialOutboxCursor(config);
 	const secret = await json(`${sessionBase}/client-secret`, { method: "POST" });
 	if (epoch !== connectionEpoch) return;
@@ -95,6 +101,10 @@ async function start() {
 
 function cleanupCurrentConnection() {
 	connectionEpoch++;
+	clearInterval(voiceHeartbeat);
+	voiceHeartbeat = undefined;
+	if (voiceLease) releaseVoiceLease(voiceLease);
+	voiceLease = undefined;
 	window.parent.postMessage({ type: "pi-agents-call", active: false }, location.origin);
 	startButton.disabled = false;
 	document.getElementById("hangup").disabled = true;
@@ -108,6 +118,62 @@ function cleanupCurrentConnection() {
 	currentStream = undefined;
 	remoteAudio.srcObject = null;
 	remoteAudio.hidden = true;
+}
+
+function releaseVoiceLease(lease) {
+	const body = JSON.stringify({ lease });
+	const url = `${sessionBase}/voice-disconnect`;
+	if (navigator.sendBeacon?.(url, new Blob([body], { type: "application/json" }))) return;
+	fetch(url, { method: "POST", headers: { "content-type": "application/json" }, body, keepalive: true }).catch(() => {});
+}
+
+async function startCompanion(config, epoch) {
+	const pc = new RTCPeerConnection();
+	currentPc = pc;
+	document.getElementById("hangup").disabled = false;
+	pc.ontrack = event => {
+		if (epoch !== connectionEpoch) return;
+		remoteAudio.hidden = false; remoteAudio.srcObject = event.streams[0];
+		remoteAudio.play().catch(() => log("Tap Play to enable speaker audio."));
+	};
+	const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } });
+	if (epoch !== connectionEpoch) { for (const track of stream.getTracks()) track.stop(); return; }
+	currentStream = stream;
+	for (const track of stream.getAudioTracks()) pc.addTrack(track, stream);
+	dc = pc.createDataChannel("oai-events"); // Audio-session negotiation only; the server owns model events/tools.
+	const offer = await pc.createOffer(); await pc.setLocalDescription(offer);
+	const negotiate = takeover => json(`${sessionBase}/voice-connect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ sdp: offer.sdp, takeover }) });
+	let result;
+	try { result = await negotiate(false); }
+	catch (error) {
+		if (epoch !== connectionEpoch) return;
+		if (error.status !== 409 || !confirm("Another device is using this voice conversation. Take over?")) throw error;
+		result = await negotiate(true);
+	}
+	if (epoch !== connectionEpoch) { releaseVoiceLease(result.lease); return; }
+	voiceLease = result.lease;
+	await pc.setRemoteDescription({ type: "answer", sdp: result.answer });
+	if (epoch !== connectionEpoch) return;
+	setStatus(`Voice connected · ${config.model}`, "status");
+	document.getElementById("notice").textContent = "";
+	window.parent.postMessage({ type: "pi-agents-call", active: true }, location.origin);
+	voiceHeartbeat = setInterval(async () => {
+		if (voiceHeartbeatInFlight || epoch !== connectionEpoch) return;
+		voiceHeartbeatInFlight = true;
+		try {
+			const state = await json(`${sessionBase}/voice-heartbeat`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lease: result.lease }) });
+			if (epoch !== connectionEpoch) return;
+			if (state.restart) {
+				document.getElementById("notice").textContent = "Refreshing the voice connection. Your Pi work continues.";
+				await json(`${sessionBase}/voice-disconnect`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ lease: result.lease }) });
+				if (epoch !== connectionEpoch) return;
+				voiceLease = undefined;
+				await start();
+			}
+		} catch (error) {
+			if (epoch === connectionEpoch) { cleanupCurrentConnection(); setStatus("Voice disconnected · reconnect when ready", "warn"); log(error.message); }
+		} finally { voiceHeartbeatInFlight = false; }
+	}, 3000);
 }
 
 async function pollMessages() {
@@ -275,13 +341,14 @@ function sendRealtime(event, traceOptions = {}) {
 }
 
 async function postEvent(event, options = {}) {
+	if (companionMode) return; // Provider control and tool execution belong to the server.
 	if (options.log !== false) log(event.type);
 	await json(`${sessionBase}/event`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify(event) });
 }
 
 async function json(url, options) {
 	const response = await fetch(url, options);
-	if (!response.ok) throw new Error(`${url} failed: ${response.status} ${await response.text()}`);
+	if (!response.ok) throw Object.assign(new Error(`${url} failed: ${response.status} ${await response.text()}`), { status: response.status });
 	return response.json();
 }
 

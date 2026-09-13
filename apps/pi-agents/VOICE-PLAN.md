@@ -1,0 +1,25 @@
+# Server-owned voice companion
+
+## Contract
+
+One logical companion follows one open Pi session and its active branch. Pi owns work; voice owns its spoken interaction and chooses what to say. Devices are interchangeable and a new device must explicitly take over. Losing voice never interrupts Pi.
+
+## Implementation batches
+
+1. **Runtime and provider transport.** Add a server-owned companion with bounded voice handover, Pi-output observations, read-only history/status tools, `post_message(message, origin)`, one active device lease, restart supervision, and durable private state. Use server-authenticated WebRTC negotiation and an authenticated sideband connection to the *same* provider session. Keep credentials and tool execution out of the browser. Azure documents this observer/controller architecture: https://learn.microsoft.com/en-us/azure/foundry/openai/how-to/realtime-audio-webrtc .
+2. **Pi and device wiring.** Host the runtime in the existing loopback helper process (a server module, not another model/Pi agent), behind the existing Pi Agents gateway. Observe ordinary Pi output, queue voice-originated messages without steering, and send non-turn-triggering lifecycle notices. Browser becomes audio/UI only in companion mode. Keep legacy eco/raw transports compatible. Device detach closes provider resources; reconnect restores compact voice-side state and current Pi context. Enforce leases, including disappearance without an unload event.
+3. **Validation and handoff.** Deterministic lifecycle, tool-origin, branch, bounded-context, disconnect-race, and persistence tests; browser tests through the real gateway/helper with mocked provider; live Azure negotiation/sideband/tool/result/cleanup checks when available. Report physical-device validation separately. Commit and secret-scan each batch before pushing.
+
+## Context and safety
+
+- Pi gets only posted messages and lifecycle notices, never the entire voice transcript/handover.
+- Pi history retrieval is bounded, session/branch scoped, and excludes private reasoning, tool results, and system instructions.
+- Resume context contains recent voice turns, any model-written handover, current Pi briefing and bounded new visible output. Older original Pi messages remain retrievable through tools.
+- The service owns IDs, deduplication, branch invalidation, lease expiry, and connection teardown. The model does not decide whether a stale device remains authorized.
+- Voice can initiate a question; its origin must remain distinguishable from a user-directed instruction. Pi receives it as a queued custom message, not a steering interrupt.
+- Restart at a quiet boundary before provider session/context limits. A short model-delivered reconnect notice plus handover is best effort; hard expiry/disconnect must still close resources. Failed/abrupt sessions resume from saved recent turns, without claiming an unheard answer was heard.
+- Detached mode records Pi state without model inference. Connected idle mode has no application-imposed silence timeout; provider limits still require rollover.
+
+## Known prerequisites/limits
+
+The required `~/.codex/skills/pi-extension-dev` skill is absent in this environment. Full quality gate has an existing missing `sentrux` dependency; an existing probe references a missing design note. No claim of live browser/phone success will be based solely on mocks. Cloudflare Access must protect the complete hostname; origin checking is not authentication.

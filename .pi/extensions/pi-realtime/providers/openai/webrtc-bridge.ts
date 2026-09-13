@@ -62,6 +62,7 @@ export class OpenAIWebRTCBridgeAdapter implements RealtimeProviderAdapter {
 	}
 
 	async pushContext(input: RealtimeContextPushRequest): Promise<ProviderDeliveryReceipt> {
+		if (this.helper.isCompanion?.(this.providerSessionId)) return { status: "skipped", message: "The voice companion observes your normal visible output and chooses its own speech. Write a normal response instead of using realtime_send_* tools." };
 		const interaction = this.requireInteraction();
 		const wantsResponse = input.mode === "request_spoken_response";
 		if (!wantsResponse || interaction.backendSpeechContext !== "isolated_update") this.enqueue(realtimeClientEventRecord(backendUpdateItemEvent(input)));

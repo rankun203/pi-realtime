@@ -40,7 +40,7 @@ export function registerPiRealtime(pi: ExtensionAPI): void {
 	});
 
 	pi.on("session_start", async (_event, ctx) => { currentCtx = ctx; hydrate(ctx, store, service); syncUi(ctx, service); });
-	pi.on("session_tree", async (_event, ctx) => { currentCtx = ctx; hydrate(ctx, store, service); syncUi(ctx, service); });
+	pi.on("session_tree", async (_event, ctx) => { currentCtx = ctx; controlPlane.branchChanged?.(ctx); hydrate(ctx, store, service); syncUi(ctx, service); });
 	pi.on("session_compact", async (_event, ctx) => { currentCtx = ctx; hydrate(ctx, store, service); syncUi(ctx, service); });
 	pi.on("context", (event) => filterRealtimeContextMessages(event, service.state()));
 	pi.on("session_shutdown", async () => { await service.shutdown(); currentCtx = undefined; });

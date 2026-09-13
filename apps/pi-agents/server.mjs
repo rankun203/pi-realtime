@@ -60,7 +60,7 @@ export function createDashboard({ registryDir = defaultRegistry(), publicHost = 
    const helpers = await discoverHelpers(registryDir);
    return reply(res, 200, { agents: helpers.flatMap(h => h.sessions.map(s => ({ ...s, helperId: h.id, project: h.project, path: `/agents/${h.id}/pi-realtime/openai/${s.id}` }))) });
   }
-  const route = /^\/agents\/([a-f0-9-]{36})(\/pi-realtime\/(?:webrtc\/client\.js|openai\/[a-zA-Z0-9_-]{1,100}(?:\/(?:config|client-secret|event|outbox|messages|message))?))$/.exec(url.pathname);
+  const route = /^\/agents\/([a-f0-9-]{36})(\/pi-realtime\/(?:webrtc\/client\.js|openai\/[a-zA-Z0-9_-]{1,100}(?:\/(?:config|client-secret|event|outbox|messages|message|voice-connect|voice-heartbeat|voice-disconnect))?))$/.exec(url.pathname);
   if (!route || !['GET', 'POST'].includes(req.method)) return reply(res, 404, { error: 'Not found' });
   const helper = (await discoverHelpers(registryDir)).find(h => h.id === route[1]);
   if (!helper) return reply(res, 404, { error: 'Agent offline' });
@@ -77,7 +77,7 @@ export function createDashboard({ registryDir = defaultRegistry(), publicHost = 
    res.setHeader('content-type', response.headers['content-type'] || 'application/octet-stream');
    response.pipe(res);
   });
-  upstream.setTimeout(30000, () => upstream.destroy(new Error('timeout')));
+  upstream.setTimeout(45000, () => upstream.destroy(new Error('timeout')));
   upstream.on('error', () => reply(res, 502, { error: 'Agent connection failed' }));
   res.on('close', () => upstream.destroy());
   upstream.end(body);

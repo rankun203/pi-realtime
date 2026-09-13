@@ -1,3 +1,7 @@
+import { homedir } from "node:os";
+import { VoiceCompanion } from "../../companion/runtime";
+import { openAIVoiceTransport } from "../../companion/openai";
+import type { VoiceTransport } from "../../companion/types";
 import { createHelperDiscovery } from "./discovery";
 import type { ChatMessage, DashboardBridge } from "../../dashboard";
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
@@ -28,11 +32,15 @@ type HelperSession = {
 	outboxPollTrace: OutboxPollTraceState;
 };
 
-export function createWebRTCHelperServer(): WebRTCHelperServer {
-	return new LocalWebRTCHelperServer();
+type HelperOptions = { voiceTransport?: VoiceTransport; stateDirectory?: string };
+export function createWebRTCHelperServer(options: HelperOptions = {}): WebRTCHelperServer {
+	return new LocalWebRTCHelperServer(options);
 }
 
 class LocalWebRTCHelperServer implements WebRTCHelperServer {
+	private companion: VoiceCompanion | undefined;
+	private companionOwner: string | undefined;
+	constructor(private readonly options: HelperOptions) {}
 	private server: Server | undefined;
 	private port: number | undefined;
 	private dashboard: DashboardBridge | undefined;
@@ -63,6 +71,9 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	async stop(): Promise<void> {
 		const server = this.server;
 		if (!server) return;
+		await this.companion?.close();
+		this.companion = undefined;
+		this.companionOwner = undefined;
 		this.sessions.clear();
 		this.discovery.remove();
 		await new Promise<void>((resolve, reject) => server.close((error) => error ? reject(error) : resolve()));
@@ -73,6 +84,20 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	registerSession(config: WebRTCHelperRegistrationConfig, sink: WebRTCHelperSink): void {
 		const { createClientSecret, normalizeUsageEvent, trace, ...sessionConfig } = config;
 		const session = { config: { ...sessionConfig, debugTracePath: trace?.path }, createClientSecret, normalizeUsageEvent, trace, sink, outbox: [], messages: [], seq: 0, lastSeenAt: Date.now(), deliveredOutboxId: 0, outboxPollTrace: createOutboxPollTraceState() };
+		if (config.interaction?.mode === "agent" && this.dashboard?.pi) {
+			if (this.companion) throw new Error("This Pi session already has a voice companion. Reuse it or stop it before starting another.");
+			this.companionOwner = config.providerSessionId;
+			this.companion = new VoiceCompanion({
+				bridge: this.dashboard.pi, model: config.model,
+				transport: this.options.voiceTransport ?? openAIVoiceTransport(),
+				stateDirectory: this.options.stateDirectory ?? join((process.env.PI_CODING_AGENT_DIR || join(homedir(), ".pi", "agent")).replace(/^~(?=\/|$)/, homedir()), "pi-realtime", "companions"),
+				onEvent: event => {
+					if (event.type !== "response.done" || !normalizeUsageEvent) return;
+					const observation = normalizeUsageEvent({ source: "response", realtimeEvent: event, providerEventId: event.event_id, at: Date.now() });
+					if (observation) sink.onProviderEvent({ type: "usage", provider: "openai", providerSessionId: config.providerSessionId, localSeq: Date.now(), at: Date.now(), observation });
+				},
+			});
+		}
 		this.sessions.set(config.providerSessionId, session);
 		if (this.port) this.discovery.publish(this.port);
 		trace?.write({ source: "helper_server", direction: "lifecycle", action: "registerSession", model: config.model });
@@ -81,6 +106,10 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	unregisterSession(providerSessionId: ProviderSessionId, reason: string): void {
 		const session = this.sessions.get(providerSessionId);
 		if (!session) return;
+		if (this.companionOwner === providerSessionId) {
+			void this.companion?.close().catch(() => {});
+			this.companion = undefined; this.companionOwner = undefined;
+		}
 		this.enqueueForSession(session, { type: "pi.helper.close", reason });
 		session.trace?.write({ source: "helper_server", direction: "lifecycle", action: "unregisterSession", reason });
 		session.sink.onProviderEvent(this.normalize(session, { type: "disconnected", reason }) as NormalizedProviderEvent);
@@ -90,7 +119,9 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	}
 
 
+	isCompanion(providerSessionId: ProviderSessionId): boolean { return this.companionOwner === providerSessionId && !!this.companion; }
 	enqueue(providerSessionId: ProviderSessionId, event: Record<string, unknown>): void {
+		if (this.isCompanion(providerSessionId)) return;
 		this.enqueueForSession(this.requireSession(providerSessionId), event);
 	}
 
@@ -142,16 +173,30 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	}
 
 	private sessionRoute(url: URL): { providerSessionId: ProviderSessionId; action: string } | undefined {
-		const match = /^\/pi-realtime\/openai\/([^/]+)\/(config|client-secret|event|outbox|messages|message)$/.exec(url.pathname);
+		const match = /^\/pi-realtime\/openai\/([^/]+)\/(config|client-secret|event|outbox|messages|message|voice-connect|voice-heartbeat|voice-disconnect)$/.exec(url.pathname);
 		return match ? { providerSessionId: decodeURIComponent(match[1] ?? ""), action: match[2] ?? "" } : undefined;
 	}
 
 	private async handleSessionRoute(req: IncomingMessage, res: ServerResponse, url: URL, route: { providerSessionId: ProviderSessionId; action: string }): Promise<void> {
 		const session = this.requireSession(route.providerSessionId);
 		session.lastSeenAt = Date.now();
+		const companion = this.companionOwner === route.providerSessionId ? this.companion : undefined;
+		if (companion && req.method === "POST" && route.action.startsWith("voice-")) {
+			const body = await readJson<{ sdp?: unknown; takeover?: boolean; lease?: string }>(req);
+			if (route.action === "voice-connect") {
+				if (typeof body.sdp !== "string" || !body.sdp.startsWith("v=0") || body.sdp.length > 100000) return this.respond(res, 400, { error: "invalid_sdp" });
+				const result = await companion.connect(body.sdp, body.takeover === true);
+				if (res.destroyed) { await companion.release(result.lease); return; }
+				return this.respond(res, 200, result);
+			}
+			if (typeof body.lease !== "string") return this.respond(res, 400, { error: "lease_required" });
+			if (route.action === "voice-disconnect") { await companion.release(body.lease); return this.respond(res, 200, { ok: true }); }
+			return this.respond(res, 200, companion.heartbeat(body.lease));
+		}
+		if (companion && ["client-secret", "event", "outbox"].includes(route.action)) return this.respond(res, 409, { error: "Voice companion is controlled server-side" });
 		if (req.method === "GET" && route.action === "messages") {
 			const snapshot = this.dashboard?.snapshot() ?? { messages: [], project: "Pi", usage: "cost pending" };
-			return this.respond(res, 200, { ...snapshot, messages: [...snapshot.messages, ...session.messages].sort((a, b) => a.at - b.at).slice(-150) });
+			return this.respond(res, 200, { ...snapshot, messages: [...snapshot.messages, ...(companion?.messages() ?? session.messages)].sort((a, b) => a.at - b.at).slice(-150) });
 		}
 		if (req.method === "POST" && route.action === "message") {
 			if (!this.dashboard) return this.respond(res, 503, { error: "chat_unavailable" });
@@ -160,7 +205,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 			await this.dashboard.sendMessage(body.text.trim());
 			return this.respond(res, 202, { ok: true });
 		}
-		if (req.method === "GET" && route.action === "config") return this.respond(res, 200, { ...session.config, resumeOutboxAfter: session.deliveredOutboxId });
+		if (req.method === "GET" && route.action === "config") return this.respond(res, 200, { ...session.config, companion: !!companion, resumeOutboxAfter: session.deliveredOutboxId });
 		if (req.method === "POST" && route.action === "client-secret") return this.respond(res, 200, await session.createClientSecret());
 		if (req.method === "POST" && route.action === "event") return this.handleInboundEvent(req, res, session);
 		if (req.method === "GET" && route.action === "outbox") return this.respondOutbox(res, url, session);

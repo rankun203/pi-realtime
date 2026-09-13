@@ -1,3 +1,5 @@
+import { branchChatMessages } from "./dashboard";
+import type { PiBridge } from "./companion/types";
 import type { ExtensionAPI, ExtensionContext } from "@earendil-works/pi-coding-agent";
 import { citationDeckObserved, voiceInstructionSubmitted } from "./events";
 import { REALTIME_REQUEST_MESSAGE_TYPE, REALTIME_SESSION_MESSAGE_TYPE, renderRealtimeRequestMessage, renderRealtimeSessionMessage } from "./messages";
@@ -9,6 +11,8 @@ export type PiInstructionSink = { sendInstruction(input: VoiceInstructionInput):
 
 export type ControlPlane = {
 	instructionSink: PiInstructionSink;
+	voiceBridge?(): PiBridge;
+	branchChanged?(ctx: ExtensionContext): void;
 	sendChatMessage(text: string): void;
 	currentTarget(ctx: ExtensionContext): PiTargetRef;
 	observeCitations(ctx: ExtensionContext): CitationDeck;
@@ -16,7 +20,24 @@ export type ControlPlane = {
 };
 
 export function createControlPlane(pi: ExtensionAPI, store: Store, getContext: () => ExtensionContext | undefined): ControlPlane {
+	let branchId = "root";
+	const context = () => { const ctx = getContext(); if (!ctx) throw new Error("Pi session is closed"); return ctx; };
 	return {
+		branchChanged(ctx) { branchId = ctx.sessionManager.getLeafId() ?? "root"; },
+		voiceBridge: () => ({
+			snapshot() { const ctx = context(); return { sessionId: ctx.sessionManager.getSessionId(), branchId, project: ctx.cwd, busy: !ctx.isIdle(), messages: branchChatMessages(ctx.sessionManager.getBranch()) }; },
+			history(before, limit = 10) {
+				const rows = branchChatMessages(context().sessionManager.getBranch(), Number.MAX_SAFE_INTEGER);
+				const index = before ? rows.findIndex(row => row.id === before) : rows.length;
+				if (index < 0) return [];
+				return rows.slice(Math.max(0, index - Math.min(20, Math.max(1, limit))), index);
+			},
+			async postMessage(message, origin) {
+				context();
+				pi.sendMessage({ customType: "pi-voice.message", content: `Voice companion (${origin === "user" ? "user-directed" : "voice-initiated"}):\n${message}\n\nRespond with normal visible messages. The voice companion observes your output; special speech tools are unnecessary. Voice-initiated suggestions are not user authorization for additional work.`, display: true, details: { origin } }, { deliverAs: "followUp", triggerTurn: true });
+			},
+			lifecycle(text) { pi.sendMessage({ customType: "pi-voice.lifecycle", content: text, display: false }, { deliverAs: "nextTurn", triggerTurn: false }); },
+		}),
 		instructionSink: createInstructionSink(pi, store, getContext),
 		sendChatMessage(text) { pi.sendUserMessage(text, { deliverAs: "followUp" }); },
 		currentTarget,
@@ -26,7 +47,7 @@ export function createControlPlane(pi: ExtensionAPI, store: Store, getContext: (
 			return deck;
 		},
 		sendSessionAwareness(session, active) {
-			pi.sendMessage({ customType: REALTIME_SESSION_MESSAGE_TYPE, content: renderRealtimeSessionMessage(session, active), display: true, details: { providerSessionId: session.providerSessionId, provider: session.provider, model: session.model, interactionMode: session.interactionMode, active, at: Date.now() } });
+			pi.sendMessage({ customType: REALTIME_SESSION_MESSAGE_TYPE, content: renderRealtimeSessionMessage(session, active), display: true, details: { providerSessionId: session.providerSessionId, provider: session.provider, model: session.model, interactionMode: session.interactionMode, active, at: Date.now() } }, { deliverAs: "nextTurn", triggerTurn: false });
 		},
 	};
 }

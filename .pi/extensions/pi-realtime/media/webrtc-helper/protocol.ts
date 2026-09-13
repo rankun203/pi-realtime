@@ -44,6 +44,7 @@ export type WebRTCHelperSink = {
 
 export type WebRTCHelperServer = {
 	setDashboard?(bridge: DashboardBridge): void;
+	isCompanion?(providerSessionId: ProviderSessionId): boolean;
 	start(): Promise<void>;
 	stop(): Promise<void>;
 	registerSession(config: WebRTCHelperRegistrationConfig, sink: WebRTCHelperSink): void;
