@@ -37,19 +37,7 @@ export function realtimeCompletions(): string[] {
 }
 
 async function start(tokens: string[], ctx: ExtensionCommandContext, service: Service): Promise<void> {
-	const provider = providerArg(tokens) ?? "fake";
-	const model = valueAfter(tokens, "--model") ?? service.defaultModelFor(provider);
-	const personaId = valueAfter(tokens, "--persona") ?? "default";
-	const primary = !tokens.includes("--secondary");
-	const interactionMode = modeArg(tokens) ?? service.defaultInteractionMode();
-	try {
-		const providerSessionId = await service.startSession({ provider, model, personaId, primary, interactionMode }, ctx);
-		notify(ctx, `Started ${provider} realtime session ${providerSessionId} (${model}, mode=${interactionMode}).${primary ? "" : " Not primary."}`);
-		const warning = service.providerWarning(provider);
-		if (warning) notify(ctx, warning, "warning");
-	} catch (error) {
-		notify(ctx, error instanceof Error ? error.message : String(error), "warning");
-	}
+	return startProvider(providerArg(tokens) ?? "fake", tokens, ctx, service);
 }
 
 async function stop(tokens: string[], ctx: ExtensionCommandContext, service: Service): Promise<void> {
@@ -187,7 +175,9 @@ async function startProvider(provider: ProviderKind, tokens: string[], ctx: Exte
 			const url = await service.startSessionMedia(providerSessionId, mediaMode, ctx);
 			return notify(ctx, `Started ${provider} realtime session ${providerSessionId} (${model}, mode=${interactionMode}) and opened ${mediaMode} media: ${url}`);
 		}
-		notify(ctx, `Started ${provider} realtime session ${providerSessionId} (${model}, mode=${interactionMode}).`);
+		notify(ctx, `Started ${provider} realtime session ${providerSessionId} (${model}, mode=${interactionMode}).${tokens.includes("--secondary") ? " Not primary." : ""}`);
+		const warning = service.providerWarning(provider);
+		if (warning) notify(ctx, warning, "warning");
 	} catch (error) {
 		notify(ctx, error instanceof Error ? error.message : String(error), "warning");
 	}

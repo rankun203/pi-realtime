@@ -160,6 +160,8 @@ Inside Pi:
 /realtime start --provider openai --mode agent
 ```
 
+Both `/realtime start --provider openai` and `/realtime openai start` honor the WebRTC preference. `/realtime webrtc on` sets the preference for future starts; to attach the browser helper to an already-active session, run `/realtime openai webrtc start`.
+
 The browser opens a **WebRTC helper** page and asks for microphone permission. The browser can apply echo cancellation, noise suppression, and automatic gain control; use headphones if your browser/device does not provide reliable echo cancellation.
 
 Use agent mode when you want the realtime model to hear you and decide when to involve Pi. If you prefer direct transcript routing and have a working transcription model, select eco mode explicitly:
