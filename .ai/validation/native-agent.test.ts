@@ -10,14 +10,18 @@ import { OpenAIRealtimeProviderAdapter } from "../../.pi/extensions/pi-realtime/
 
 import { defaultVoiceToolSurface, voiceSystemPrompt, voiceSpeechRendererPrompt } from "../../.pi/extensions/pi-realtime/prompt";
 
-test("voice identity distinguishes in-app conversation from external dialing", () => {
+test("voice role delegates substantive work to Pi without UI or telephony framing", () => {
  const surface = defaultVoiceToolSurface();
  const prompt = voiceSystemPrompt(surface);
- assert.match(prompt, /receive live user audio and reply with spoken audio/);
- assert.match(prompt, /Start call opens the browser microphone\/speaker connection/);
- assert.match(prompt, /unless the user explicitly means an external person or phone number/);
- assert.match(prompt, /No telephone dialing tool is available/);
- assert.match(prompt, /default action for user audio is to call request/);
+ assert.match(prompt, /conversational voice agent with a Pi coding agent/);
+ assert.match(prompt, /listen to the user, invoke Pi to do tasks, and speak the results/);
+ assert.match(prompt, /Use the request tool to obtain Pi's work or answer/);
+ assert.match(prompt, /Ground substantive answers and completion claims in Pi's returned results/);
+ assert.match(prompt, /Submit each user intent once/);
+ assert.match(prompt, /authority to begin work comes from the user's current request/);
+ assert.match(prompt, /After presenting an update, return to listening/);
+ assert.doesNotMatch(prompt, /telephone|phone call|dialing|Start call|End call|text-only chatbot/i);
+ assert.deepEqual(surface.tools.map(tool => tool.name), ["request"]);
  for (const mode of ["strict_verbatim", "per_response_rendering"] as const) {
   const renderer = voiceSpeechRendererPrompt(surface, mode);
   assert.doesNotMatch(renderer, /What would you like to work on/);
