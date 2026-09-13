@@ -64,14 +64,13 @@ test("realtime configuration and transports", async (t) => {
   await t.test("HTTP Azure uses api-key only; OpenAI uses Bearer", async () => {
    for (const authMode of ["api-key", "bearer"]) {
     const config = { ...openAIConnectionConfig(), authMode };
-    const client = createOpenAIRealtimeClient(config);
-    client.fetch = async (url, init) => {
+    const client = createOpenAIRealtimeClient(config).withOptions({ fetch: async (url, init) => {
      assert.equal(String(url), azure + "/realtime/client_secrets");
      const headers = new Headers(init?.headers);
      assert.equal(headers.get("api-key"), authMode === "api-key" ? "test-azure-key" : null);
      assert.equal(headers.get("authorization"), authMode === "bearer" ? "Bearer test-azure-key" : null);
      return Response.json({ value: "ek_test" });
-    };
+    } });
     await client.realtime.clientSecrets.create({ session: { type: "realtime", model: "test" } });
    }
   });

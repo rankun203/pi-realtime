@@ -3,7 +3,15 @@
   "version": "0.2.0",
   "packageManager": "pnpm@10.30.3",
   "private": false,
-  "description": "Pi extension for pi-realtime.",
+  "description": "Pi realtime voice with isolated global configuration and OpenAI/Azure API-key support.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/rankun203/pi-realtime.git"
+  },
+  "homepage": "https://github.com/rankun203/pi-realtime#readme",
+  "bugs": {
+    "url": "https://github.com/rankun203/pi-realtime/issues"
+  },
   "main": ".pi/extensions/pi-realtime/index.ts",
   "type": "commonjs",
   "files": [
@@ -20,6 +28,7 @@
     ]
   },
   "scripts": {
+    "test": "node .ai/validation/pi-realtime-config.mjs",
     "gates:typecheck": "tsc -p tsconfig.json",
     "gates:validation": "for f in .ai/validation/pi-realtime-*.mjs; do node \"$f\" || exit 1; done",
     "gates:deslop": "npx --yes d3sl0p typescript --report-min error .pi/extensions/pi-realtime",

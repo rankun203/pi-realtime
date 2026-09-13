@@ -1,65 +1,53 @@
-# pi-realtime
+# pi-realtime — configurable OpenAI & Azure voice
 
-Talk to [Pi](https://www.npmjs.com/package/@earendil-works/pi-coding-agent) while you code.
+Talk to [Pi](https://pi.dev/) while you code: speak requests, let Pi work on your project, and hear acknowledgements, progress updates, and replies.
 
-`pi-realtime` adds realtime voice to Pi: start a local voice session, ask Pi to work on your project, and hear short spoken updates while the full details remain visible in Pi. It is designed for hands-on coding sessions where you want to stay in flow without turning every question or status check into typing.
+This is a community fork of **[transcendr/pi-realtime](https://github.com/transcendr/pi-realtime)**, based on upstream **v0.2.0**. It adds automatic global configuration and Azure OpenAI GA endpoint support without changing Pi's coding provider. It is not the upstream npm release or an official OpenAI/Microsoft integration.
 
-> Preview release: `pi-realtime` is usable for local preview testing, but provider behavior, command names, and install ergonomics may change before `1.0.0`.
+> Preview software. Azure token creation and WebSocket session configuration have been tested with `gpt-realtime-2.1-mini`. Browser microphone, speaker, interruption, and end-to-end voice behavior still require live validation. The larger 2.1 model has not been live-tested in this fork.
 
-## What’s new
+## What this fork changes
 
-`0.2.0` makes OpenAI voice sessions more practical for everyday use:
+- **Automatic global settings:** reads the `pi-realtime.openai` section of Pi's `settings.json`.
+- **Separate realtime credentials in Pi's existing `auth.json`:** uses `pi-realtime:openai`, leaving `openai` and other coding credentials untouched.
+- **Configurable endpoint and authentication:** preserves OpenAI defaults; supports Azure `/openai/v1` endpoints and `api-key` auth for both HTTP and WebSocket connections.
+- **Configurable browser destination:** the WebRTC helper receives the calls URL associated with its ephemeral token, rather than always calling OpenAI's public endpoint. The resource API key stays server-side.
+- **Additional model profiles:** `gpt-realtime-2.1-mini` and `gpt-realtime-2.1`, plus support for a custom deployment name configured as the default model.
+- **Installed-package asset fix:** browser HTML/JavaScript resolve relative to the extension, not the project you happen to launch Pi from.
+- **Regression tests and an opt-in live connectivity check.**
 
-- Eco mode routes your speech directly to Pi as backend work while the voice speaks Pi’s updates back.
-- WebRTC is the recommended OpenAI voice path for speaker-safe audio with browser echo cancellation.
-- You can choose `gpt-realtime-mini` or `gpt-realtime-2` for future OpenAI sessions.
-- Spoken updates are more predictable: mini is better at reading Pi updates literally, realtime-2 can use compact spoken summaries for long updates, and multi-part updates are spoken in order.
-- Usage tracking helps you inspect realtime cost while testing.
-
-See the [changelog](CHANGELOG.md) for details.
-
-## Why use it
-
-- Talk to Pi while your hands stay in the editor or terminal.
-- Ask for backend work, status checks, summaries, and follow-up tasks by voice.
-- Hear quick acknowledgements, progress updates, and final answers without losing the full text in Pi.
-- Use OpenAI Realtime with a browser/WebRTC voice path that is safer for speaker playback than raw microphone/audio loops.
-- Switch between lower-cost mini sessions and stronger realtime-2 sessions depending on the kind of voice output you want.
-
-## Install
-
-Install globally for your Pi environment:
-
-```bash
-pi install npm:pi-realtime
-```
-
-Install project-locally:
-
-```bash
-pi install -l npm:pi-realtime
-```
-
-For local development from this checkout:
-
-```bash
-npm install
-npm run gates:quality
-pi install -l .
-```
+The original eco/agent interaction modes, transcript routing, spoken updates, and assessment of usage remain upstream features. This fork does not invent prices for the new 2.1 models.
 
 ## Requirements
 
-- Pi `^0.74.0`.
-- `OPENAI_API_KEY` for OpenAI Realtime sessions, either exported in the shell or set in a local `.env` file.
-- A browser for the recommended WebRTC voice path.
-- `ffmpeg` and `ffplay` only for lower-level raw microphone/audio troubleshooting.
+- Pi (upstream targets `^0.74.0`; this fork has also been load-tested with the installed newer Pi).
+- Node.js 22+ for development and validation.
+- An OpenAI API key or an Azure OpenAI resource key and an available realtime deployment.
+- A browser with microphone permission for the recommended WebRTC path.
+- `ffmpeg` and `ffplay` only for optional raw-audio troubleshooting.
 
-## Global configuration (local Azure-compatible build)
+## Install this fork
 
-This local build automatically reads `~/.pi/agent/settings.json` and `auth.json` (or the directory set by `PI_CODING_AGENT_DIR`). Merge these entries into the existing files; do not replace other settings or credentials.
+Remove the upstream package first if it is already installed, to avoid duplicate commands/tools:
 
-`settings.json` — configuration only:
+```bash
+pi remove npm:pi-realtime
+pi install git:github.com/rankun203/pi-realtime@azure-global-config
+```
+
+Only run the removal command if you have that package installed. If you previously installed a local copy, remove its registered path before adding the GitHub package. Then restart Pi or run `/reload`.
+
+Installing `npm:pi-realtime` installs the **upstream release**, not these changes. Pi's git package installer handles runtime dependencies automatically.
+
+## Global configuration
+
+Merge the examples below into your existing files. **Do not overwrite other settings or credentials.**
+
+Paths default to `~/.pi/agent/`. If you set `PI_CODING_AGENT_DIR`, the extension reads `settings.json` and `auth.json` from that directory instead.
+
+### Azure OpenAI
+
+In **`~/.pi/agent/settings.json`**:
 
 ```json
 {
@@ -73,147 +61,150 @@ This local build automatically reads `~/.pi/agent/settings.json` and `auth.json`
 }
 ```
 
-`auth.json` — a separate credential slot, leaving the coding provider untouched:
+In **`~/.pi/agent/auth.json`**:
 
 ```json
 {
-  "pi-realtime:openai": { "type": "api_key", "key": "YOUR-AZURE-RESOURCE-KEY" }
+  "pi-realtime:openai": {
+    "type": "api_key",
+    "key": "YOUR-AZURE-RESOURCE-KEY"
+  }
 }
 ```
 
-Use a literal API key in this extension's auth entry. Set file permissions to `600`. The extension reads configuration when establishing connections and does not export file values into `process.env`.
+`model` must be your **Azure deployment name**, which may differ from the underlying model name. Use the resource's HTTPS API root ending in `/openai/v1`; do not append `/realtime`, a legacy preview route, or an `api-version` query parameter.
 
-For realtime only, shell environment overrides project `.env`, which overrides global files. Supported overrides are `OPENAI_BASE_URL`, `OPENAI_API_KEY`, `OPENAI_AUTH_MODE`, and `OPENAI_REALTIME_MODEL`. Existing session-level `/realtime openai model ...` selections override the configured default; `--model` selects a model for an individual start.
+The provider command stays `--provider openai`: it identifies the compatible realtime protocol, not a hardcoded host. Azure's `.openai.azure.com` hostname automatically selects `api-key` authentication. Set `authMode` explicitly for custom domains or proxies.
 
-Without configuration, OpenAI's `https://api.openai.com/v1`, Bearer authentication, and `gpt-realtime-mini` remain the defaults. Azure `.openai.azure.com` hosts automatically select `api-key` authentication; `authMode` explicitly overrides this for custom domains/proxies. Both HTTP and WebSocket paths use the configured endpoint. The browser receives only an ephemeral token and its matching calls URL, never the resource key.
+### OpenAI
 
-Supported speech profiles include `gpt-realtime-mini`, `gpt-realtime-2`, `gpt-realtime-2.1-mini`, and `gpt-realtime-2.1`. For Azure, `model` is the deployment name. Custom configured deployment names are also accepted; unknown names use the default behavior profile. Pricing for the 2.1 models is not guessed, so token usage is available but cost estimates may be unavailable.
+Use the same credential entry with your OpenAI key:
 
-Start from any project:
+```json
+{
+  "pi-realtime:openai": {
+    "type": "api_key",
+    "key": "YOUR-OPENAI-API-KEY"
+  }
+}
+```
+
+No realtime settings section is necessary for OpenAI defaults. If switching back from Azure, update or remove the Azure settings:
+
+```json
+{
+  "pi-realtime": {
+    "openai": {
+      "baseUrl": "https://api.openai.com/v1",
+      "authMode": "bearer",
+      "model": "gpt-realtime-mini"
+    }
+  }
+}
+```
+
+### Credential safety
+
+```bash
+chmod 600 ~/.pi/agent/auth.json ~/.pi/agent/settings.json
+```
+
+- Keep the key in `auth.json`, not `settings.json`, Git, screenshots, or issue reports.
+- This extension currently reads **literal API keys** from its namespaced auth entry. Pi's command-based/interpolated credential features and OAuth are not implemented for this entry.
+- Credentials are stored as plaintext with filesystem permissions, not in an encrypted vault.
+- File-based values are not exported into `process.env`, so other Pi providers do not inherit this extension's configuration.
+- The browser gets an ephemeral token, not the resource key. Debug traces may contain conversation text: inspect and redact them before sharing.
+- The local WebRTC helper is for a trusted workstation. Do not expose its HTTP port publicly.
+
+### Optional environment overrides
+
+Existing environment-variable workflows remain supported:
+
+| Variable | Setting | Default |
+| --- | --- | --- |
+| `OPENAI_BASE_URL` | `baseUrl` | `https://api.openai.com/v1` |
+| `OPENAI_AUTH_MODE` | `authMode` | `api-key` for Azure hosts, otherwise `bearer` |
+| `OPENAI_REALTIME_MODEL` | `model` | `gpt-realtime-mini` |
+| `OPENAI_API_KEY` | credential | No default |
+
+For this extension, precedence is **shell environment → project `.env` → global files → defaults**. This is extension-specific; it is not Pi's core credential precedence. Project `.env` loading remains supported for compatibility, but global files are recommended when working across projects.
+
+Generic exported `OPENAI_*` variables can affect other programs launched from your shell. Prefer the namespaced global files when isolation matters.
+
+Configuration files are read for new connections. Stop and restart the voice session after changing credentials or endpoints. Model selection follows: explicit `--model` → persisted `/realtime openai model ...` preference → configured model/default.
+
+## Start talking
+
+Inside Pi:
 
 ```text
 /realtime webrtc on
 /realtime start --provider openai --mode eco
 ```
 
-After switching to this local package, restart Pi or run `/reload` first. The voice provider remains `openai`; Pi's coding provider is unchanged.
+The browser opens a **WebRTC helper** page and asks for microphone permission. The browser can apply echo cancellation, noise suppression, and automatic gain control; use headphones if your browser/device does not provide reliable echo cancellation.
 
-Local validation: `pnpm run gates:typecheck` and `pnpm run gates:validation`. The npm distribution omits upstream structure-gate tooling and the original validation suite; the added tests cover configuration, auth headers, model profiles, and browser assets. The opt-in `.ai/validation/live-azure-smoke.ts` creates an ephemeral credential and short-lived WebSocket session without sending audio.
-
-## Start an OpenAI voice session
-
-Set `OPENAI_API_KEY`:
-
-```bash
-export OPENAI_API_KEY=...
-```
-
-Or copy `.env.example` to `.env` and replace the placeholder:
-
-```bash
-cp .env.example .env
-$EDITOR .env
-```
-
-Choose a model, then start eco mode:
+**Eco mode** is the recommended starting point: speech is transcribed and routed to Pi; the realtime model speaks Pi's updates. **Agent mode** lets the voice model decide when to request work from Pi:
 
 ```text
-/realtime openai model gpt-realtime-mini
-/realtime start --provider openai --mode eco
+/realtime start --provider openai --mode agent
 ```
 
-For eco mode, start with `gpt-realtime-mini`. In this architecture Pi does the project work, and the voice model mainly listens, transcribes, and speaks Pi’s updates back, which mini handles well at lower cost. Use `gpt-realtime-2` when you specifically want the realtime model to act more like a reasoning voice agent, rather than a lightweight voice link between you and the Pi backend.
+Pi's coding model/provider is selected independently with Pi's normal model controls.
 
-## Core commands
-
-Most users only need these commands:
+### Useful commands
 
 ```text
-/realtime start --provider openai --mode eco
-/realtime openai model [gpt-realtime-mini|gpt-realtime-2]
 /realtime status
+/realtime openai model
+/realtime openai model gpt-realtime-2.1-mini
+/realtime openai model gpt-realtime-2.1
+/realtime start --provider openai --mode eco --model YOUR-DEPLOYMENT
 /realtime usage --details
 /realtime stop
 ```
 
-- `/realtime start --provider openai --mode eco` — start a voice session where speech goes to Pi as backend work and the voice speaks Pi updates back.
-- `/realtime openai model gpt-realtime-mini|gpt-realtime-2` — choose the default OpenAI realtime model for future sessions.
-- `/realtime status` — show active sessions and the current primary session.
-- `/realtime usage --details` — inspect tracked usage while testing cost.
-- `/realtime stop` — stop the current primary realtime session.
+The built-in speech profiles cover `gpt-realtime-mini`, `gpt-realtime-2`, `gpt-realtime-2.1-mini`, and `gpt-realtime-2.1`. A custom deployment configured in settings is also accepted by model selection, but an unknown name uses the default behavior profile rather than assuming which model it represents.
 
-Additional provider/debug commands exist for local development, fake-provider tests, raw microphone/audio experiments, and troubleshooting, but they are intentionally not the main user workflow.
-
-## WebRTC voice path
-
-For OpenAI voice sessions, the recommended path is the browser/WebRTC helper. It opens a localhost browser page that owns microphone and speaker media so the browser can apply echo cancellation, noise suppression, and automatic gain control.
-
-That makes it the right default for speaker-safe testing and normal voice use. To make future OpenAI sessions automatically use the browser/WebRTC voice path, run:
-
-```text
-/realtime webrtc on
-```
-
-Raw microphone/playback commands still exist for troubleshooting and low-level smoke tests, but they are not the primary workflow.
-
-## Interaction model
-
-The recommended default is **eco mode**:
-
-1. You speak naturally.
-2. OpenAI Realtime handles live audio, transcription, interruption, and playback.
-3. Pi receives the final transcript and does the project work.
-4. The voice session speaks Pi’s acknowledgements, progress, and final answer back to you.
-
-This is different from a traditional voice-agent setup where the realtime model is also the agent deciding how to respond, when to call tools, and how much reasoning to do in the voice session.
-
-Eco mode has two practical benefits:
-
-- **Lower cost:** the realtime model does less agent reasoning. Pi does the backend work, and long spoken updates can be compacted for voice while the full answer remains visible in Pi.
-- **Clearer workflow:** the voice interface stays focused on listening and speaking. Pi remains the source of truth for repository work, file changes, command output, and final task reasoning.
-
-`pi-realtime` also supports `agent` mode as a compatibility mode where the realtime model can decide when to call a request tool for Pi backend work. It can be useful for more discussion-heavy sessions where you want the voice agent to behave more like a conversational partner, but eco mode is the recommended starting point for normal coding sessions because it is more predictable and cost-efficient.
-
-Live OpenAI testing has validated direct transcript routing and spoken backend updates, but provider behavior can still vary across models and sessions; use `/realtime usage --details` when validating cost. For long voice sessions, restart periodically instead of running all the way to the provider session limit, especially before exact wording or release-review work.
-
-## How Pi talks back
-
-Pi communicates back to the voice session deliberately. Instead of letting the voice model invent a response to every backend event, Pi sends the kind of spoken update that fits the moment:
-
-- **Acknowledgements** — short confirmations that Pi heard the request and is starting work.
-- **Status updates** — brief progress notes while a longer task is running.
-- **Replies** — final answers, summaries, or reports when Pi has completed the backend work.
-- **Status checks** — lightweight checks that tell Pi whether a live voice session is available before trying to speak.
-
-This makes the voice experience feel like a fluid conversation without moving project authority into the voice model. You can ask a question, hear a quick acknowledgement, keep talking or wait while Pi works, then hear the result when it is ready. If you speak again while Pi is working, the new transcript can steer the active work instead of waiting for a separate typed follow-up. For example, you might ask Pi to clean up a messy git worktree and make focused commits. While Pi is inspecting files and running checks, you can ask, “How’s it going?” and Pi can answer with a short spoken progress update, then continue the cleanup. The spoken response can be concise for your ears while the detailed answer, commands, files, and evidence remain visible in Pi.
-
-## Fake provider for development
-
-The fake provider is for local extension development and deterministic validation without provider credentials, microphones, speakers, or network calls.
-
-```text
-/realtime start --provider fake
-/realtime fake transcript <text>
-/realtime stop
-```
-
-Most users do not need the fake provider during normal OpenAI voice use.
+The 2.1 models' tokens are tracked, but dollar estimates may be unavailable because their prices have not been added to the pricing table.
 
 ## Development
 
-```bash
-npm install
-npm run gates:quality
-```
-
-Useful individual gates:
+Use nvm, Corepack, and the pinned pnpm version:
 
 ```bash
-npm run gates:structure
-npm run gates:deslop
-npm run gates:typecheck
-npm run gates:validation
-npm run scans:deslop
+git clone --branch azure-global-config https://github.com/rankun203/pi-realtime.git
+cd pi-realtime
+nvm install 22
+nvm use 22
+corepack enable
+pnpm install --frozen-lockfile
+pnpm run gates:typecheck
+pnpm test
+pnpm run gates:deslop
+pi install .
 ```
 
-`gates:*` scripts are blocking. `scans:*` scripts are advisory sensors; findings are leads for semantic review, not automatic failures.
+The repository retains upstream history, changelog, and validation probes. New tests cover precedence, credential isolation, URL/auth validation, HTTP headers, ephemeral-token routing, WebSocket auth options, model profiles, and browser asset resolution.
+
+`pnpm test` runs the fork's deterministic tests. The broader upstream `gates:validation` command is retained, but one probe references a design document absent from the upstream v0.2.0 Git tree (`.ai/docs/realtime-voice/pi-to-realtime-context-and-tool-response-policy-goal-plan.md`). The other upstream probes can be run individually with Node.
+
+The upstream `gates:quality` command additionally requires **sentrux** and the author's `pi-extension-dev` tooling. These gates are retained, not silently weakened; a clean checkout cannot complete them without the missing prerequisites. `scans:deslop` is an advisory scan. Passing deterministic checks is not proof of live microphone/audio behavior.
+
+### Opt-in Azure connectivity smoke test
+
+After configuring your global files:
+
+```bash
+pnpm exec tsx .ai/validation/live-azure-smoke.ts
+```
+
+This contacts the configured provider, creates an ephemeral token, opens a short-lived WebSocket session, and validates a session update. It sends no microphone audio and requests no generated response. It uses your configured model and may incur provider charges. It prints only a small status summary, never the key or ephemeral token.
+
+This does **not** test browser SDP negotiation, audio capture/playback, interruption, or a complete voice conversation.
+
+## Attribution and licensing
+
+Original extension: [transcendr/pi-realtime](https://github.com/transcendr/pi-realtime), distributed as [`pi-realtime`](https://www.npmjs.com/package/pi-realtime). This fork's changes are maintained by [rankun203](https://github.com/rankun203).
+
+The upstream v0.2.0 source and npm package did not include a declared license. This GitHub fork preserves attribution and does **not** assert a new license over upstream code. Public availability is not a general redistribution/license grant; clarify licensing with the upstream author before redistributing outside GitHub or incorporating it into another product.
