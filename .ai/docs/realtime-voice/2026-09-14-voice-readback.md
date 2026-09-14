@@ -5,6 +5,8 @@ status: implemented; phone acceptance pending
 
 # Voice connectivity and faithful readback
 
+Historical revision. The user subsequently requested a stricter [thin relay](2026-09-14-thin-relay.md): follow-ups go to Pi and readbacks are nearly verbatim. That note supersedes the shortened-readback/local-history-answer behavior below.
+
 ## Problem and user feedback
 
 Browser voice claimed to connect while media never established. After successful phone access through a private HTTPS route, voice posted a question to Pi, speculated about missing context while waiting, and then repeated Pi's answer. Pi's answer itself was appropriate.

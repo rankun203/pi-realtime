@@ -25,7 +25,9 @@ This version lists **helper-enabled sessions**, not every arbitrary Pi process. 
 
 ## Server-owned voice companion
 
-In browser agent mode, the helper hosts the voice runtime. Pi remains the work authority and its output is unchanged. Voice faithfully reads back Pi's ordinary visible progress and results, lightly shortened for speech rather than adding its own investigation. Progress can be spoken while Pi is busy. A successful `post_message` queue receipt alone does not schedule another response; actual Pi updates do. Failed posts and requested history lookups still receive a response. Follow-up questions can use the original visible messages or bounded history; spoken summaries do not replace those messages. Voice uses `post_message(message, origin)` to queue user-directed or voice-initiated messages without steering an active Pi turn; `get_pi_status` and `read_pi_history` inspect work without starting a new turn. Special `realtime_send_*` tools are unnecessary and are skipped in companion mode. Legacy raw/eco transports retain their existing behavior.
+In browser agent mode, the helper hosts a thin voice relay. Pi's prompt, tools, output, and work behavior remain unchanged. Voice queues intentional speech—including greetings and follow-ups—through `post_message(message)`, with server-owned `user` origin and no steering interrupt. There are no independent voice history/status tools. Side conversations and unclear audio can choose silent `wait_for_user`; unclear words are not guessed. Addressee recognition is probabilistic, not guaranteed background-speech filtering, and native VAD can still interrupt playback before that judgment.
+
+Native input turns require a tool and cannot generate independent audio. Pi's new progress/results schedule separate, tool-free, out-of-band audio responses containing just the new text to read nearly verbatim, with formatting adapted for speech. Progress can be spoken while Pi is busy. Receipts, waiting, and memory housekeeping do not schedule extra speech; failed requests do. Context/readback limits remain bounded. Follow-ups always go to Pi rather than being answered from voice memory. Special `realtime_send_*` tools are unnecessary and skipped in companion mode. Legacy raw/eco transports retain their behavior.
 
 - Devices negotiate through the helper; provider credentials and sideband tool execution remain server-side. Audio is still direct WebRTC between device and provider.
 - End call, tab closure, or a missing device heartbeat closes provider resources. A takeover revokes the old lease; stale events cannot post new work. Lease expiry is 45 seconds for disappearance without a usable unload notification.
@@ -55,7 +57,7 @@ The live test incurs provider token charges and checks an utterance asking Pi to
 
 ### Voice readback prompt evaluation
 
-The [readback validation notes](../../.ai/docs/realtime-voice/2026-09-14-voice-readback.md) record the official model/prompt guidance and the separation between receipts and Pi output. To evaluate the actual configured voice model with synthetic Pi progress and follow-up questions:
+The [readback validation notes](../../.ai/docs/realtime-voice/2026-09-14-voice-readback.md) and [thin-relay evidence](../../.ai/docs/realtime-voice/2026-09-14-thin-relay.md) record official guidance, rejected prompt-only approaches, and the separation between input routing and Pi readback. To evaluate the actual configured voice model with synthetic Pi progress and follow-up questions:
 
 ```bash
 corepack pnpm exec tsx .ai/validation/live-readback-smoke.ts

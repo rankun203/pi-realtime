@@ -2,6 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createService } from "../../.pi/extensions/pi-realtime/service";
 import { handleRealtimeCommand } from "../../.pi/extensions/pi-realtime/commands";
+import { applyEvent, createInitialState } from "../../.pi/extensions/pi-realtime/events";
+import { emptyUsageBreakdown } from "../../.pi/extensions/pi-realtime/usage";
+import { statusText } from "../../.pi/extensions/pi-realtime/view";
 
 function fixture(autoMediaMode?: string) {
 	const calls: any[] = [],
@@ -174,6 +177,101 @@ test("stopped and failed history does not prevent bare command starting voice", 
 	};
 	await handleRealtimeCommand("", f.ctx, f.service);
 	assert.deepEqual(f.calls, ["chat"]);
+});
+
+test("a rejected provider handshake cleans its adapter and records a stopped session", async () => {
+	const events: any[] = [];
+	const calls: string[] = [];
+	const service: any = createService(
+		{ append: (event: any) => events.push(event), state: () => ({ sessions: new Map() }) } as any,
+		{} as any,
+	);
+	service.buildPackets = () => [{}];
+	service.providers = {
+		get: () => ({
+			assertCredentials() {},
+			createAdapter: () => ({
+				provider: "openai",
+				async connect() {
+					throw new Error("HTTP 400 OperationNotSupported");
+				},
+				async disconnect() {
+					calls.push("closed");
+				},
+			}),
+		}),
+	};
+	await assert.rejects(
+		service.startSession({ provider: "openai", model: "unavailable", interactionMode: "agent" }, {}),
+		/OperationNotSupported/,
+	);
+	assert.deepEqual(calls, ["closed"]);
+	assert.equal(service.adapters.size, 0);
+	assert.equal(events.at(-1).kind, "session_stopped");
+	assert.equal(events.at(-1).reason, "connection failed");
+});
+
+test("WebRTC handoff ignores retired raw lifecycle events without losing cost accounting", async () => {
+	const state = createInitialState();
+	const footers: (string | undefined)[] = [];
+	let rawSink: any;
+	const raw = {
+		provider: "openai",
+		async connect(_config: unknown, sink: unknown) {
+			rawSink = sink;
+		},
+	};
+	const service: any = createService(
+		{ state: () => state, append: (event: any) => applyEvent(state, event) } as any,
+		{ sendSessionAwareness() {} } as any,
+		() => footers.push(statusText(state)),
+	);
+	service.buildPackets = () => [{}];
+	service.providers = { get: () => ({ assertCredentials() {}, createAdapter: () => raw }) };
+	const id = await service.startSession(
+		{ provider: "openai", model: "gpt-realtime-2.1-mini", interactionMode: "agent" },
+		{},
+	);
+	let seq = 0;
+	const event = (type: string, extra = {}) => ({
+		type,
+		provider: "openai",
+		providerSessionId: id,
+		localSeq: ++seq,
+		at: seq,
+		...extra,
+	});
+	rawSink.onProviderEvent(event("connected"));
+	rawSink.onProviderEvent(event("disconnected", { reason: "user" }));
+	service.setAdapter(id, { provider: "openai", mediaMode: "webrtc" });
+	service.providerSink.onProviderEvent(event("connected"));
+	// Reproduce the recorded ordering: the old ws close arrives AFTER bridge connected.
+	rawSink.onProviderEvent(event("disconnected", { reason: "socket closed" }));
+	rawSink.onProviderEvent(event("error", { message: "retired socket", recoverable: true }));
+	assert.equal(state.sessions.get(id)?.status, "active");
+	assert.equal(state.sessions.get(id)?.lastError, undefined);
+	const usage = (cost: number) =>
+		event("usage", {
+			observation: {
+				provider: "openai",
+				providerSessionId: id,
+				model: "gpt-realtime-2.1-mini",
+				source: "response",
+				at: seq,
+				input: emptyUsageBreakdown(),
+				output: emptyUsageBreakdown(),
+				totalTokens: 100,
+				estimatedCostUsd: cost,
+			},
+		});
+	service.providerSink.onProviderEvent(usage(0.02));
+	rawSink.onProviderEvent(usage(0.01));
+	assert.equal(state.usage.length, 2, "late billable usage from the retired socket must still count");
+	assert.match(footers.at(-1)!, /200 voice tokens.*\$0\.030000 est/);
+	service.providerSink.onProviderEvent(event("disconnected", { reason: "user" }));
+	assert.equal(statusText(state), undefined, "a genuine current-session stop still hides the footer");
+	rawSink.onProviderEvent(event("connected"));
+	assert.equal(statusText(state), undefined, "retired transport cannot revive a stopped session");
 });
 
 function chatServiceFixture() {

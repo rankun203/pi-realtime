@@ -1,5 +1,6 @@
 import { OpenAIRealtimeWS as OpenAIRealtimeWebSocket } from "openai/realtime/ws";
 import { createOpenAIRealtimeClient, openAIConnectionConfig, openAIWebSocketOptions } from "./connection";
+import { awaitRealtimeSocketOpen } from "./socket-open";
 import type { RealtimeClientEvent, RealtimeServerEvent } from "openai/resources/realtime/realtime";
 import type {
 	ContextPacket,
@@ -32,8 +33,6 @@ import { hasOpenAIRealtimeCredentials, renderContextPacket, toOpenAITool } from 
 
 export { hasOpenAIRealtimeCredentials };
 
-const OPENAI_WS_CONNECT_TIMEOUT_MS = 15_000;
-
 export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 	readonly provider: ProviderKind = "openai";
 	readonly mediaMode = "raw" as const;
@@ -64,8 +63,12 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 		);
 		this.socket = rt;
 		rt.on("event", (event) => this.handleServerEvent(event));
-		rt.on("error", (error) => this.emit({ type: "error", message: error.message, recoverable: true }));
-		await this.awaitOpen(rt);
+		let opened = false;
+		rt.on("error", (error) => {
+			if (opened) this.emit({ type: "error", message: error.message, recoverable: true });
+		});
+		await awaitRealtimeSocketOpen(rt.socket, connection.apiKey);
+		opened = true;
 		this.emit({ type: "connected" });
 		rt.socket.addEventListener("close", () => this.emit({ type: "disconnected", reason: "socket closed" }));
 		await this.updateToolSurface(config.toolSurface, config.systemPrompt);
@@ -167,31 +170,6 @@ export class OpenAIRealtimeProviderAdapter implements RealtimeProviderAdapter {
 				tool_choice: interaction.toolChoice,
 			},
 		} as RealtimeClientEvent);
-	}
-
-	private awaitOpen(rt: OpenAIRealtimeWebSocket): Promise<void> {
-		return new Promise((resolve, reject) => {
-			const timer = setTimeout(
-				() => reject(new Error("Timed out waiting for OpenAI realtime socket to open.")),
-				OPENAI_WS_CONNECT_TIMEOUT_MS,
-			);
-			rt.socket.addEventListener(
-				"open",
-				() => {
-					clearTimeout(timer);
-					resolve();
-				},
-				{ once: true },
-			);
-			rt.socket.addEventListener(
-				"error",
-				() => {
-					clearTimeout(timer);
-					reject(new Error("OpenAI realtime socket error before open."));
-				},
-				{ once: true },
-			);
-		});
 	}
 
 	private handleServerEvent(event: RealtimeServerEvent): void {

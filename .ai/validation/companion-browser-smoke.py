@@ -79,7 +79,7 @@ def exercise(info):
         chat.locator("#start").click()
         expect(chat.locator("#status")).to_contain_text("Voice connected", timeout=40000)
         if not LIVE:
-            context.request.post(control + "/emit", data={"type":"response.function_call_arguments.done", "name":"post_message", "call_id":"message-1", "arguments":json.dumps({"message":"Inspect the diagnostic directory.","origin":"user"})})
+            context.request.post(control + "/emit", data={"type":"response.function_call_arguments.done", "name":"post_message", "call_id":"message-1", "arguments":json.dumps({"message":"Inspect the diagnostic directory."})})
         state = wait_state(context.request, control, lambda s: s["completions"] >= 1, timeout=45)
         assert any(m.get("customType") == "pi-voice.message" for m in state["messages"]), state["messages"]
         wait_state(context.request, control, lambda s: any("pi_observation" in json.dumps(e) for e in s["connections"][0]["sent"]))

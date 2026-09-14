@@ -1,28 +1,67 @@
-// Opt-in live prompt evaluation: real voice model, synthetic Pi messages/tools.
-// Generates audio over WebSocket (not a browser microphone/WebRTC test); incurs token charges.
+// Opt-in: real voice model, synthetic Pi messages/tools; incurs provider token charges.
+// PI_READBACK_SIDE_AUDIO optionally supplies 24 kHz mono signed-16-bit LE PCM of a side conversation.
+// This is a WebSocket model/audio test, not a physical microphone or WebRTC network test.
 import WebSocket from "ws";
-import { openAIConnectionConfig } from "../../.pi/extensions/pi-realtime/providers/openai/connection";
-import { companionInstructions, companionTools } from "../../.pi/extensions/pi-realtime/companion/prompt";
+import { readFileSync } from "node:fs";
 import assert from "node:assert/strict";
+import { openAIConnectionConfig } from "../../.pi/extensions/pi-realtime/providers/openai/connection";
+import { awaitRealtimeSocketOpen } from "../../.pi/extensions/pi-realtime/providers/openai/socket-open";
+import {
+	companionInstructions,
+	companionTools,
+	readbackResponse,
+	nativeInputResponsePolicy,
+} from "../../.pi/extensions/pi-realtime/companion/prompt";
+import {
+	buildOpenAIRealtimeAudioConfig,
+	openAIRealtimeAudioInput,
+} from "../../.pi/extensions/pi-realtime/providers/openai/session-config";
+import { providerInteractionFor } from "../../.pi/extensions/pi-realtime/domain/interaction-modes";
+
 async function main() {
-	const c = openAIConnectionConfig();
-	const url = new URL(c.baseURL + "/realtime");
+	const config = openAIConnectionConfig();
+	if (!config.apiKey) throw new Error("Realtime credential missing");
+	const url = new URL(config.baseURL + "/realtime");
 	url.protocol = "wss:";
-	url.searchParams.set("model", c.model);
-	if (!c.apiKey) throw new Error("Realtime credential missing");
-	const headers = c.authMode === "api-key" ? { "api-key": c.apiKey } : { Authorization: `Bearer ${c.apiKey}` };
+	url.searchParams.set("model", config.model);
+	const headers =
+		config.authMode === "api-key" ? { "api-key": config.apiKey } : { Authorization: `Bearer ${config.apiKey}` };
 	const ws = new WebSocket(url, { headers, handshakeTimeout: 10000 });
 	const events: any[] = [];
 	let fatal = "";
-	const progressText =
-		"The narrowed change passed unit tests, all nine workspace type checks, lint, formatting, and the production build. Unit validation took 14.3 seconds, type checks 6.3 seconds, and the build 14.9 seconds. Only the user form, its schema, shared validation support, and supporting tests/docs remain changed. I am recording the results and committing locally; nothing will be pushed yet.";
-	const send = (v: any) => ws.send(JSON.stringify(v));
+	let audioBytes = 0;
+	const send = (event: any) => ws.send(JSON.stringify(event));
+	ws.on("error", () => {
+		fatal = "Provider WebSocket failure";
+	});
+	ws.on("message", (data) => {
+		const event = JSON.parse(data.toString());
+		if (event.type === "response.output_audio.delta") {
+			audioBytes += Buffer.from(event.delta, "base64").length;
+			return; // Do not retain generated audio in diagnostic output.
+		}
+		events.push(event);
+		if (event.type === "error") fatal = `Provider error: ${event.error?.code}`;
+		if (event.type !== "response.function_call_arguments.done") return;
+		const result =
+			event.name === "post_message"
+				? { posted: true, delivery: "queued" }
+				: event.name === "wait_for_user"
+					? { waiting: true }
+					: event.name === "save_voice_memory"
+						? { saved: true }
+						: { error: "Unexpected fixture tool" };
+		send({
+			type: "conversation.item.create",
+			item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify(result) },
+		});
+	});
 	const wait = async (predicate: () => boolean) => {
 		const end = Date.now() + 20000;
 		while (!predicate()) {
 			if (fatal) throw Error(fatal);
-			if (Date.now() > end) throw Error("Timed out");
-			await new Promise((r) => setTimeout(r, 50));
+			if (Date.now() > end) throw Error("Provider evaluation timed out");
+			await new Promise((resolve) => setTimeout(resolve, 50));
 		}
 	};
 	const item = (role: string, text: string) =>
@@ -30,59 +69,87 @@ async function main() {
 			type: "conversation.item.create",
 			item: { type: "message", role, content: [{ type: "input_text", text }] },
 		});
-	ws.on("error", () => {
-		fatal = "WebSocket failure";
-	});
-	ws.on("message", (data) => {
-		const e = JSON.parse(data.toString());
-		events.push(e);
-		if (e.type === "error") fatal = "Provider error: " + e.error?.code;
-		if (e.type === "response.function_call_arguments.done")
-			send({
-				type: "conversation.item.create",
-				item: {
-					type: "function_call_output",
-					call_id: e.call_id,
-					output: JSON.stringify(
-						e.name === "post_message"
-							? { posted: true, delivery: "queued", note: "Pi continues normally. Observe its forthcoming output." }
-							: e.name === "read_pi_history"
-								? [{ id: "progress", role: "assistant", text: progressText }]
-								: { busy: true, recent: [{ id: "progress", role: "assistant", text: progressText }] },
-					),
-				},
-			});
-	});
-	const response = async () => {
+	const response = async (readback?: string) => {
 		const start = events.length;
-		send({ type: "response.create", response: { output_modalities: ["audio"] } });
-		await wait(() => events.slice(start).some((e) => e.type === "response.done"));
+		send({
+			type: "response.create",
+			response: readback ? readbackResponse([{ id: "fixture", role: "assistant", text: readback, at: 0 }]) : {},
+		});
+		await wait(() => events.slice(start).some((event) => event.type === "response.done"));
 		return events.slice(start);
 	};
+	const audioTurn = async (path: string) => {
+		const pcm = readFileSync(path);
+		const start = events.length;
+		for (let offset = 0; offset < pcm.length; offset += 4800) {
+			send({ type: "input_audio_buffer.append", audio: pcm.subarray(offset, offset + 4800).toString("base64") });
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		await wait(() => events.slice(start).some((event) => event.type === "response.done"));
+		return events.slice(start);
+	};
+	const calls = (turn: any[]) => turn.filter((event) => event.type === "response.function_call_arguments.done");
+	const transcript = (turn: any[]) =>
+		turn
+			.filter((event) => event.type === "response.output_audio_transcript.done")
+			.map((event) => event.transcript)
+			.join(" ");
+	const assertForward = (turn: any[], words: string) => {
+		const posts = calls(turn).filter((event) => event.name === "post_message");
+		assert.equal(
+			posts.length,
+			1,
+			JSON.stringify(
+				turn.filter((event) => ["response.done", "response.function_call_arguments.done"].includes(event.type)),
+			),
+		);
+		assert.deepEqual(
+			JSON.parse(posts[0].arguments),
+			{ message: words },
+			"Relay added interpretation or model-selected origin",
+		);
+		assert.equal(transcript(turn), "", "Relay spoke independently instead of waiting for Pi");
+	};
+	const assertWait = (turn: any[]) => {
+		assert(
+			calls(turn).some((event) => event.name === "wait_for_user"),
+			JSON.stringify(calls(turn)),
+		);
+		assert(!calls(turn).some((event) => event.name === "post_message"), "Side conversation created Pi work");
+		assert.equal(transcript(turn), "", "Side conversation caused speech");
+	};
 	try {
-		await wait(() => events.some((e) => e.type === "session.created"));
+		await awaitRealtimeSocketOpen(ws, config.apiKey);
+		await wait(() => events.some((event) => event.type === "session.created"));
 		send({
 			type: "session.update",
 			session: {
 				type: "realtime",
 				instructions: companionInstructions(),
 				tools: companionTools(),
-				tool_choice: "auto",
-				output_modalities: ["audio"],
+				...nativeInputResponsePolicy(),
+				audio: buildOpenAIRealtimeAudioConfig({
+					...openAIRealtimeAudioInput(providerInteractionFor("agent")),
+					includeRawPcmFormat: true,
+					includeRawPcmOutputFormat: true,
+				}),
 			},
 		});
-		await wait(() => events.some((e) => e.type === "session.updated"));
-		item("user", "Please run the checks and commit locally. Do not push.");
-		const initial = await response();
-		assert(initial.some((e) => e.type === "response.function_call_arguments.done" && e.name === "post_message"));
-		const count = events.filter((e) => e.type === "response.created").length;
-		await new Promise((r) => setTimeout(r, 1800));
+		await wait(() => events.some((event) => event.type === "session.updated"));
+		const request = "你能看到这个项目吗？这个项目是干啥的？";
+		item("user", request);
+		assertForward(await response(), request);
+		const count = events.filter((event) => event.type === "response.created").length;
+		await new Promise((resolve) => setTimeout(resolve, 1500));
 		assert.equal(
-			events.filter((e) => e.type === "response.created").length,
+			events.filter((event) => event.type === "response.created").length,
 			count,
-			"Queued receipt started an extra response",
+			"Receipt triggered another response",
 		);
-		console.log("PASS: posted request; queue receipt did not trigger a new response");
+		console.log("PASS: Chinese request forwarded faithfully; receipt stayed silent");
+
+		const progressText =
+			"Unit tests, all nine workspace type checks, lint, formatting, and the production build passed. Unit validation took 14.3 seconds. I am committing locally; nothing will be pushed.";
 		item(
 			"system",
 			JSON.stringify({
@@ -91,47 +158,69 @@ async function main() {
 				messages: [{ id: "progress", role: "assistant", text: progressText }],
 			}),
 		);
-		const progress = await response();
-		const text = progress
-			.filter((e) => e.type === "response.output_audio_transcript.done")
-			.map((e) => e.transcript)
-			.join(" ");
-		assert(text.length > 0);
-		assert(
-			!progress.some((e) => e.type === "response.function_call_arguments.done"),
-			"Progress triggered an unnecessary tool",
+		const progress = await response(progressText);
+		const text = transcript(progress);
+		assert.equal(calls(progress).length, 0, "Reading progress must not trigger tools");
+		for (const fact of [
+			/unit tests/i,
+			/nine|9/i,
+			/type checks/i,
+			/lint/i,
+			/formatting/i,
+			/production build/i,
+			/(?:14|fourteen)(?:\.| point )(?:3|three)/i,
+			/local/i,
+			/push/i,
+		])
+			assert.match(text, fact);
+		assert.doesNotMatch(text, /\bcommitted\b/i, "Planned commit became a completed commit");
+		console.log("LIVE readback:", text);
+
+		const followUp = "How long did unit validation take?";
+		item("user", followUp);
+		assertForward(await response(), followUp);
+		item(
+			"system",
+			JSON.stringify({
+				type: "pi_observation",
+				busy: false,
+				messages: [{ id: "detail", role: "assistant", text: "Unit validation took 14.3 seconds." }],
+			}),
 		);
-		assert(/pass/i.test(text) && /local/i.test(text) && /push/i.test(text), text);
-		assert(!/\b(committed|pushed successfully)\b/i.test(text), text);
-		console.log("LIVE progress:", text);
-		item("user", "How long did unit validation take?");
-		const detail = await response();
-		if (
-			detail.some(
-				(e) =>
-					e.type === "response.function_call_arguments.done" && ["get_pi_status", "read_pi_history"].includes(e.name),
-			)
-		)
-			detail.push(...(await response()));
-		const answer = detail
-			.filter((e) => e.type === "response.output_audio_transcript.done")
-			.map((e) => e.transcript)
-			.join(" ");
-		assert(
-			!detail.some((e) => e.type === "response.function_call_arguments.done" && e.name === "post_message"),
-			"Existing detail caused unnecessary Pi work",
-		);
-		assert(/14\.3|fourteen.point.three/i.test(answer), answer);
-		console.log("LIVE detail:", answer);
-		console.log("PASS: concise progress and follow-up detail from unchanged original message");
+		const detail = await response("Unit validation took 14.3 seconds.");
+		assert.equal(calls(detail).length, 0);
+		assert.match(transcript(detail), /(?:14|fourteen)(?:\.| point )(?:3|three)/i);
+		console.log("PASS: follow-up delegated to Pi; its answer read aloud:", transcript(detail));
+
+		item("user", "老王，帮我拿一下杯子。我在跟你说话，不是在跟电脑说。");
+		assertWait(await response());
+		console.log("PASS: explicitly side-directed Chinese text chose silent wait");
+		if (process.env.PI_READBACK_SIDE_AUDIO) {
+			assertWait(await audioTurn(process.env.PI_READBACK_SIDE_AUDIO));
+			console.log("PASS: synthetic Chinese side-conversation audio chose silent wait under native VAD");
+		}
+		if (process.env.PI_READBACK_USER_AUDIO) {
+			const turn = await audioTurn(process.env.PI_READBACK_USER_AUDIO);
+			const posts = calls(turn).filter((event) => event.name === "post_message");
+			assert.equal(posts.length, 1, JSON.stringify(calls(turn)));
+			const args = JSON.parse(posts[0].arguments);
+			assert.deepEqual(Object.keys(args), ["message"]);
+			assert.match(args.message, /单元测试.*多长时间/);
+			assert(args.message.length < 50, "Audio follow-up was expanded into a reconstructed request");
+			assert.equal(transcript(turn), "");
+			console.log("PASS: native Chinese audio follow-up resumed forwarding without a wake word:", args.message);
+		}
+		assert(audioBytes > 0);
+		console.log("PASS: real model generated audio; bytes:", audioBytes);
 	} finally {
 		await new Promise<void>((resolve) => {
-			const t = setTimeout(() => {
+			if (ws.readyState === WebSocket.CLOSED) return resolve();
+			const timer = setTimeout(() => {
 				ws.terminate();
 				resolve();
 			}, 2000);
 			ws.once("close", () => {
-				clearTimeout(t);
+				clearTimeout(timer);
 				resolve();
 			});
 			if (ws.readyState === WebSocket.OPEN) ws.close();
@@ -140,7 +229,7 @@ async function main() {
 		console.log("CLEANUP provider socket closed");
 	}
 }
-main().catch((e) => {
-	console.error(String(e.message || e.name));
+main().catch((error) => {
+	console.error(String(error.message || error.name));
 	process.exitCode = 1;
 });

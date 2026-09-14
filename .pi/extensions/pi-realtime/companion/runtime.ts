@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { boundedMessages, companionInstructions, companionTools, startupContext } from "./prompt";
+import { boundedMessages, companionInstructions, companionTools, readbackResponse, startupContext } from "./prompt";
 import type { CompanionOptions, PiSnapshot, VoiceConnection, VoiceEvent, VoiceMemory } from "./types";
 
 type Lease = {
@@ -14,6 +14,7 @@ type Lease = {
 	playing: boolean;
 	awaitingNative: boolean;
 	pending: boolean;
+	readback: PiSnapshot["messages"];
 	restart: boolean;
 	noticeSent: boolean;
 	toolIds: Set<string>;
@@ -113,6 +114,7 @@ export class VoiceCompanion {
 				playing: false,
 				awaitingNative: false,
 				pending: false,
+				readback: [],
 				restart: false,
 				noticeSent: false,
 				toolIds: new Set(),
@@ -242,7 +244,11 @@ export class VoiceCompanion {
 		});
 		this.memory.observedIds = [...this.memory.observedIds, ...recent.map((m) => m.id)].slice(-200);
 		this.save();
-		if (recent.some((m) => m.role === "assistant")) this.lease.pending = true;
+		const assistantMessages = recent.filter((message) => message.role === "assistant");
+		if (assistantMessages.length) {
+			this.lease.readback = boundedMessages([...this.lease.readback, ...assistantMessages], 8, 8000);
+			this.lease.pending = true;
+		}
 	}
 	private requestRestart(): void {
 		const lease = this.lease;
@@ -285,7 +291,14 @@ export class VoiceCompanion {
 			return;
 		lease.pending = false;
 		lease.responding = true;
-		this.send({ type: "response.create", response: { output_modalities: ["audio"] } });
+		this.send({
+			type: "response.create",
+			// The only tool-capable spoken turn is the explicit lifecycle restart notice.
+			response: lease.noticeSent
+				? { output_modalities: ["audio"], tool_choice: { type: "function", name: "restart_voice" } }
+				: readbackResponse(lease.readback),
+		});
+		lease.readback = [];
 	}
 	private onEvent(lease: Lease, event: VoiceEvent): void {
 		if (this.lease !== lease) return;
@@ -359,14 +372,16 @@ export class VoiceCompanion {
 					typeof args.message !== "string" ||
 					!args.message.trim() ||
 					args.message.length > 12000 ||
-					!["user", "voice"].includes(args.origin)
+					Object.keys(args).some((key) => key !== "message")
 				)
-					throw new Error("Expected message (1–12000 characters) and origin=user|voice");
-				await this.options.bridge.postMessage(args.message, args.origin);
+					throw new Error("Expected only message (1–12000 characters)");
+				// The relay cannot initiate work or decide its authority; every accepted post
+				// represents intentional user input under the advertised tool contract.
+				await this.options.bridge.postMessage(args.message, "user");
 				if (this.lease !== lease) return;
 				this.memory.turns.push({
 					id: `post-${event.call_id}`,
-					role: args.origin === "user" ? "user" : "assistant",
+					role: "user",
 					text: args.message,
 					at: this.now(),
 					source: "Voice → Pi",
@@ -375,41 +390,42 @@ export class VoiceCompanion {
 				this.save();
 				result = { posted: true, delivery: "queued", note: "Pi continues normally. Observe its forthcoming output." };
 				requestResponse = false;
-			} else if (event.name === "get_pi_status") {
-				const pi = this.options.bridge.snapshot();
-				result = {
-					sessionId: pi.sessionId,
-					branchId: pi.branchId,
-					busy: pi.busy,
-					recent: pi.messages.slice(-4).map((m) => ({ ...m, text: m.text.slice(0, 2000) })),
-				};
-			} else if (event.name === "read_pi_history") {
-				result = boundedMessages(
-					this.options.bridge.history(
-						typeof args.before_id === "string" ? args.before_id : undefined,
-						Math.max(1, Math.min(20, Math.floor(Number(args.limit) || 10))),
-					),
-					20,
-					8000,
-				);
+			} else if (event.name === "wait_for_user") {
+				result = { waiting: true };
+				requestResponse = false;
 			} else if (["save_voice_memory", "restart_voice"].includes(event.name)) {
 				if (typeof args.summary !== "string" || args.summary.length > 4000)
 					throw new Error("Handover must be a string of at most 4000 characters");
 				this.memory.summary = args.summary;
 				this.save();
 				result = { saved: true };
+				requestResponse = false;
 				if (event.name === "restart_voice") lease.restart = true;
 			} else throw new Error("Unknown voice tool");
 		} catch (error) {
-			result = { error: error instanceof Error ? error.message : String(error) };
+			const message = error instanceof Error ? error.message : String(error);
+			result = { error: message };
+			lease.readback = boundedMessages(
+				[
+					...lease.readback,
+					{
+						id: `error-${event.call_id}`,
+						role: "assistant",
+						text: `I couldn't complete that voice request: ${message}`,
+						at: this.now(),
+					},
+				],
+				8,
+				8000,
+			);
 		}
 		if (this.lease !== lease) return;
 		this.send({
 			type: "conversation.item.create",
 			item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify(result) },
 		});
-		// A queued receipt has nothing to narrate. Pi progress/results schedule their own
-		// response through observe(); do not clear an update already pending there.
+		// Receipts, waiting, and private housekeeping have nothing to narrate. Pi updates
+		// schedule their own response through observe(); preserve an update already pending.
 		if (requestResponse) lease.pending = true;
 	}
 }

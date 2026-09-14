@@ -5,7 +5,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { setImmediate as settle } from "node:timers/promises";
 import { VoiceCompanion } from "../../.pi/extensions/pi-realtime/companion/runtime";
-import { startupContext } from "../../.pi/extensions/pi-realtime/companion/prompt";
+import {
+	startupContext,
+	companionTools,
+	nativeInputResponsePolicy,
+} from "../../.pi/extensions/pi-realtime/companion/prompt";
 import type {
 	PiBridge,
 	PiSnapshot,
@@ -86,9 +90,9 @@ test("companion: explicit takeover invalidates old tools and release tokens", as
 		assert.ok(f.connections[0].closed);
 		await f.companion.release(first.lease);
 		assert.ok(f.companion.heartbeat(second.lease).connected);
-		f.connections[0].emit(tool("post_message", { message: "stale", origin: "user" }));
-		f.connections[1].emit(tool("post_message", { message: "Please inspect tests", origin: "user" }));
-		f.connections[1].emit(tool("post_message", { message: "Please inspect tests", origin: "user" }));
+		f.connections[0].emit(tool("post_message", { message: "stale" }));
+		f.connections[1].emit(tool("post_message", { message: "Please inspect tests" }));
+		f.connections[1].emit(tool("post_message", { message: "Please inspect tests" }));
 		await settle();
 		assert.deepEqual(f.posted, [{ message: "Please inspect tests", origin: "user" }]);
 	} finally {
@@ -101,7 +105,7 @@ test("companion: queued receipts stay silent, but intermediate and final Pi mess
 	try {
 		await f.companion.connect("v=0");
 		const c = f.connections[0];
-		c.emit(tool("post_message", { message: "Run the checks", origin: "user" }));
+		c.emit(tool("post_message", { message: "Run the checks" }));
 		await settle();
 		await f.companion.tick();
 		assert.ok(c.sent.some((e) => e.item?.type === "function_call_output" && JSON.parse(e.item.output).posted));
@@ -115,6 +119,10 @@ test("companion: queued receipts stay silent, but intermediate and final Pi mess
 		});
 		await f.companion.tick();
 		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 1, "progress is spoken while Pi is busy");
+		const readback = c.sent.find((e) => e.type === "response.create")!.response;
+		assert.equal(readback.tool_choice, "none", "readback cannot initiate work");
+		assert.equal(readback.conversation, "none", "user history cannot replace the requested readback");
+		assert.ok(readback.input[0].content[0].text.includes(f.pi.messages[0].text));
 		assert.ok(
 			c.sent.some((e) => e.item?.content?.[0]?.text.includes(f.pi.messages[0].text)),
 			"the original Pi message reaches voice unchanged",
@@ -126,6 +134,12 @@ test("companion: queued receipts stay silent, but intermediate and final Pi mess
 		f.pi.messages.push({ id: "final", role: "assistant", text: "Committed locally. Nothing was pushed.", at: 2 });
 		await f.companion.tick();
 		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 2);
+		const finalReadback = c.sent.filter((e) => e.type === "response.create").at(-1)!.response;
+		assert.ok(finalReadback.input[0].content[0].text.includes(f.pi.messages[1].text));
+		assert.ok(
+			!finalReadback.input[0].content[0].text.includes(f.pi.messages[0].text),
+			"already read progress is not replayed",
+		);
 		assert.equal(f.posted.length, 1, "observations never trigger new Pi work");
 	} finally {
 		await f.cleanup();
@@ -142,7 +156,7 @@ test("companion: a slow posting receipt cannot erase Pi progress already pending
 				release = resolve;
 			});
 		const c = f.connections[0];
-		c.emit(tool("post_message", { message: "Run checks", origin: "user" }));
+		c.emit(tool("post_message", { message: "Run checks" }));
 		await settle();
 		f.pi.messages.push({ id: "fast-progress", role: "assistant", text: "Checking the tests.", at: 1 });
 		await f.companion.tick();
@@ -157,7 +171,7 @@ test("companion: a slow posting receipt cannot erase Pi progress already pending
 	}
 });
 
-test("companion: failed posts and requested history still schedule a voice response", async () => {
+test("companion: failed posts still schedule a voice response", async () => {
 	const f = fixture();
 	try {
 		await f.companion.connect("v=0");
@@ -165,32 +179,63 @@ test("companion: failed posts and requested history still schedule a voice respo
 		f.bridge.postMessage = async () => {
 			throw new Error("Posting failed");
 		};
-		c.emit(tool("post_message", { message: "Run checks", origin: "user" }));
+		c.emit(tool("post_message", { message: "Run checks" }));
 		await settle();
 		await f.companion.tick();
 		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 1);
 		assert.ok(c.sent.some((e) => e.item?.output?.includes("Posting failed")));
-		c.emit({ type: "response.done" });
-		c.emit(tool("read_pi_history", { limit: 4 }, "details"));
-		await settle();
-		await f.companion.tick();
-		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 2, "requested details can still be spoken");
 	} finally {
 		await f.cleanup();
 	}
 });
 
-test("companion: voice-initiated messages retain origin, history reads do not post work", async () => {
+test("companion: relay tool surface cannot select origin or investigate Pi history", async () => {
+	assert.deepEqual(nativeInputResponsePolicy(), { tool_choice: "required", output_modalities: ["text"] });
+	const tools = companionTools();
+	assert.deepEqual(
+		tools.map((t) => t.name),
+		["post_message", "wait_for_user", "save_voice_memory", "restart_voice"],
+	);
+	assert.deepEqual(Object.keys(tools[0].parameters.properties), ["message"]);
 	const f = fixture();
 	try {
 		await f.companion.connect("v=0");
 		const c = f.connections[0];
-		c.emit(tool("post_message", { message: "Which file contains the parser?", origin: "voice" }));
-		c.emit(tool("post_message", { message: "invalid", origin: "system" }, "invalid"));
-		c.emit(tool("read_pi_history", { limit: 10000 }, "read"));
+		c.emit(tool("post_message", { message: "再详细说一下。" }));
+		c.emit(tool("post_message", { message: "invented", origin: "voice" }, "invalid"));
 		await settle();
-		assert.deepEqual(f.posted, [{ message: "Which file contains the parser?", origin: "voice" }]);
+		assert.deepEqual(f.posted, [{ message: "再详细说一下。", origin: "user" }]);
+		assert.equal(f.companion.messages()[0].role, "user");
 		assert.ok(c.sent.some((e) => e.item?.call_id === "invalid" && JSON.parse(e.item.output).error));
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test("companion: side-conversation wait and private memory produce neither Pi work nor extra voice turns", async () => {
+	const f = fixture();
+	try {
+		await f.companion.connect("v=0");
+		const c = f.connections[0];
+		c.emit({ type: "input_audio_buffer.speech_started" });
+		c.emit({ type: "input_audio_buffer.speech_stopped" });
+		c.emit({ type: "response.created" });
+		c.emit(tool("wait_for_user", {}));
+		c.emit({ type: "response.done" });
+		await settle();
+		await f.companion.tick();
+		c.emit(tool("save_voice_memory", { summary: "Waiting for intentional speech." }, "memory"));
+		await settle();
+		await f.companion.tick();
+		assert.equal(f.posted.length, 0);
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 0);
+		// Waiting must not mute later Pi progress or suppress intentional follow-ups.
+		f.pi.messages.push({ id: "update", role: "assistant", text: "The checks passed.", at: 1 });
+		await f.companion.tick();
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 1);
+		c.emit(tool("post_message", { message: "Which checks?" }, "follow-up"));
+		await settle();
+		assert.deepEqual(f.posted, [{ message: "Which checks?", origin: "user" }]);
 	} finally {
 		await f.cleanup();
 	}
@@ -298,7 +343,7 @@ test("companion: a tool arriving immediately after branch navigation cannot post
 	try {
 		await f.companion.connect("v=0");
 		f.pi.branchId = "new-branch";
-		f.connections[0].emit(tool("post_message", { message: "Stale branch instruction", origin: "user" }));
+		f.connections[0].emit(tool("post_message", { message: "Stale branch instruction" }));
 		await settle();
 		assert.equal(f.posted.length, 0);
 		assert.ok(f.connections[0].closed);

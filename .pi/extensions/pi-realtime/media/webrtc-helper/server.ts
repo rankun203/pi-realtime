@@ -139,7 +139,13 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 						source: "voice_companion",
 						eventType: event.type,
 						providerEventId: event.event_id,
-						errorCode: event.error?.code,
+						toolName: event.type === "response.function_call_arguments.done" ? event.name : undefined,
+						callId: event.call_id,
+						itemId: event.item_id,
+						responseId: event.response?.id ?? event.response_id,
+						responseStatus: event.type === "response.done" ? event.response?.status : undefined,
+						responseReason: event.type === "response.done" ? event.response?.status_details?.reason : undefined,
+						errorCode: event.error?.code ?? event.response?.status_details?.error?.code,
 						reason: event.type === "voice.detached" ? event.reason : undefined,
 					});
 					const source =

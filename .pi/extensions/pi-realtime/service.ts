@@ -450,20 +450,42 @@ class RealtimeService implements Service {
 		const speechRendererMode = runtime.behaviorProfileForModel?.(input.model).backendUpdateSpeech?.rendering
 			?.systemPromptMode;
 		this.setAdapter(providerSessionId, adapter);
-		await adapter.connect(
-			{
-				providerSessionId,
-				provider: input.provider,
-				model: input.model,
-				personaId,
-				systemPrompt: mode.systemPrompt(mode.toolSurface, speechRendererMode),
-				toolSurface: mode.toolSurface,
-				initialContext: packets[0],
-				capabilities: { preferPassiveContext: input.provider === "fake", preferSemanticVad: input.provider !== "fake" },
-				interaction: mode.providerInteraction,
-			},
-			this.providerSink,
-		);
+		try {
+			await adapter.connect(
+				{
+					providerSessionId,
+					provider: input.provider,
+					model: input.model,
+					personaId,
+					systemPrompt: mode.systemPrompt(mode.toolSurface, speechRendererMode),
+					toolSurface: mode.toolSurface,
+					initialContext: packets[0],
+					capabilities: {
+						preferPassiveContext: input.provider === "fake",
+						preferSemanticVad: input.provider !== "fake",
+					},
+					interaction: mode.providerInteraction,
+				},
+				{
+					onProviderEvent: (event) => {
+						// A replaced raw socket can close after WebRTC connects. Its events must
+						// not stop the new transport or post stale work; retain billable usage.
+						if (event.type === "usage" || this.adapters.get(providerSessionId) === adapter)
+							this.providerSink.onProviderEvent(event);
+					},
+				},
+			);
+		} catch (error) {
+			// A rejected deployment must not leave a phantom starting session or socket.
+			try {
+				await adapter.disconnect("user");
+			} finally {
+				this.adapters.delete(providerSessionId);
+				this.fakeAdapters.delete(providerSessionId);
+				this.store.append(sessionStopped(providerSessionId, "connection failed"));
+			}
+			throw error;
+		}
 		for (const packet of input.provider === "fake" ? packets : packets.slice(1))
 			await this.recordContextPacket(providerSessionId, packet, adapter);
 		const session = this.store.state().sessions.get(providerSessionId);

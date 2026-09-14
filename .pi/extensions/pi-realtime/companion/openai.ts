@@ -3,6 +3,7 @@ import { openAIConnectionConfig } from "../providers/openai/connection";
 import { buildOpenAIRealtimeAudioConfig, openAIRealtimeAudioInput } from "../providers/openai/session-config";
 import { providerInteractionFor } from "../domain/interaction-modes";
 import type { VoiceTransport } from "./types";
+import { nativeInputResponsePolicy } from "./prompt";
 
 /** Server negotiation and sideband control of the SAME WebRTC model session. */
 export function openAIVoiceTransport(): VoiceTransport {
@@ -17,8 +18,7 @@ export function openAIVoiceTransport(): VoiceTransport {
 				model: input.model,
 				instructions: input.instructions,
 				tools: input.tools,
-				tool_choice: "auto",
-				output_modalities: ["audio"],
+				...nativeInputResponsePolicy(),
 				audio: buildOpenAIRealtimeAudioConfig(openAIRealtimeAudioInput(providerInteractionFor("agent"))),
 			};
 			let callHeaders = headers;
