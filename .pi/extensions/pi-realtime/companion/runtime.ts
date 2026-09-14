@@ -8,6 +8,8 @@ type Lease = {
 	token: string;
 	seenAt: number;
 	startedAt: number;
+	expiresAt?: number;
+	contextInputTokens?: number;
 	connection?: VoiceConnection;
 	speaking: boolean;
 	responding: boolean;
@@ -90,6 +92,8 @@ export class VoiceCompanion {
 				((!this.lease.responding && !this.lease.playing && !this.lease.speaking && !this.lease.awaitingNative) ||
 					this.now() - this.lease.startedAt > 59 * 60000),
 			model: this.options.model,
+			expiresAt: this.lease?.connection ? (this.lease.expiresAt ?? this.lease.startedAt + 60 * 60000) : undefined,
+			contextInputTokens: this.lease?.contextInputTokens,
 		};
 	}
 	messages() {
@@ -303,6 +307,16 @@ export class VoiceCompanion {
 	private onEvent(lease: Lease, event: VoiceEvent): void {
 		if (this.lease !== lease) return;
 		this.options.onEvent?.(event);
+		if (event.type === "session.created" && Number.isFinite(event.session?.expires_at))
+			lease.expiresAt = event.session.expires_at * 1000;
+		// Out-of-band readbacks have no conversation ID and must not replace native context telemetry.
+		if (
+			event.type === "response.done" &&
+			event.response?.conversation_id &&
+			Number.isFinite(event.response?.usage?.input_tokens) &&
+			event.response.usage.input_tokens >= 0
+		)
+			lease.contextInputTokens = event.response.usage.input_tokens;
 		if (event.type === "input_audio_buffer.speech_started") {
 			lease.speaking = true;
 			lease.awaitingNative = true;

@@ -32,10 +32,23 @@ export type ProviderMediaStartInput = {
 	recordContext(packet: ContextPacket, adapter: RealtimeProviderAdapter): Promise<void>;
 };
 
+export type VoiceTelemetry = {
+	/** Logical session owning the connected voice device. */
+	providerSessionId: ProviderSessionId;
+	/** Provider expiry in epoch milliseconds, or the local connection's estimated 60-minute deadline. */
+	expiresAt: number;
+	/** Input tokens reported for the latest native conversation response; absent before one arrives. */
+	contextInputTokens?: number;
+	/** Published model context window in tokens; absent for unverified models. */
+	contextWindowTokens?: number;
+};
+
 export type ProviderMediaRuntime = {
 	start(input: ProviderMediaStartInput): Promise<string>;
 	stop(providerSessionId?: ProviderSessionId): Promise<void>;
 	status(): string;
+	/** Live device telemetry, absent while disconnected or when this transport cannot report it. */
+	voiceTelemetry?(): VoiceTelemetry | undefined;
 	urlFor?(providerSessionId: ProviderSessionId): string;
 };
 

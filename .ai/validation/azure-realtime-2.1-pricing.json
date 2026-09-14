@@ -1,0 +1,63 @@
+{
+	"source": "https://prices.azure.com/api/retail/prices?$filter=contains(meterName,%20'gpt-realtime-2.1%20')%20and%20armRegionName%20eq%20'eastus2'%20and%20priceType%20eq%20'Consumption'",
+	"checkedAt": "2026-09-14",
+	"basis": "Global Standard USD list prices, East US 2 meters; not contractual or Data Zone billing",
+	"meters": [
+		{
+			"meterName": "gpt-realtime-2.1 Image cd inp Gl 1M Tokens",
+			"retailPrice": 0.5,
+			"currencyCode": "USD",
+			"unitOfMeasure": "1M",
+			"effectiveStartDate": "2026-07-01T00:00:00Z"
+		},
+		{
+			"meterName": "gpt-realtime-2.1 Audio inp Gl 1M Tokens",
+			"retailPrice": 32,
+			"currencyCode": "USD",
+			"unitOfMeasure": "1M",
+			"effectiveStartDate": "2026-07-01T00:00:00Z"
+		},
+		{
+			"meterName": "gpt-realtime-2.1 Image inp Gl 1M Tokens",
+			"retailPrice": 5,
+			"currencyCode": "USD",
+			"unitOfMeasure": "1M",
+			"effectiveStartDate": "2026-07-01T00:00:00Z"
+		},
+		{
+			"meterName": "gpt-realtime-2.1 Audio cd inp Gl 1M Tokens",
+			"retailPrice": 0.4,
+			"currencyCode": "USD",
+			"unitOfMeasure": "1M",
+			"effectiveStartDate": "2026-07-01T00:00:00Z"
+		},
+		{
+			"meterName": "gpt-realtime-2.1 Text inp Gl 1M Tokens",
+			"retailPrice": 4,
+			"currencyCode": "USD",
+			"unitOfMeasure": "1M",
+			"effectiveStartDate": "2026-07-01T00:00:00Z"
+		},
+		{
+			"meterName": "gpt-realtime-2.1 Text opt Gl 1M Tokens",
+			"retailPrice": 24,
+			"currencyCode": "USD",
+			"unitOfMeasure": "1M",
+			"effectiveStartDate": "2026-07-01T00:00:00Z"
+		},
+		{
+			"meterName": "gpt-realtime-2.1 Text cd inp Gl 1M Tokens",
+			"retailPrice": 0.4,
+			"currencyCode": "USD",
+			"unitOfMeasure": "1M",
+			"effectiveStartDate": "2026-07-01T00:00:00Z"
+		},
+		{
+			"meterName": "gpt-realtime-2.1 Audio opt Gl 1M Tokens",
+			"retailPrice": 64,
+			"currencyCode": "USD",
+			"unitOfMeasure": "1M",
+			"effectiveStartDate": "2026-07-01T00:00:00Z"
+		}
+	]
+}

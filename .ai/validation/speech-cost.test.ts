@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
+import { usageFromOpenAIResponseDone } from "../../.pi/extensions/pi-realtime/providers/openai/usage";
 import {
 	backendUpdateResponseEvent,
 	backendUpdateItemEvent,
@@ -75,6 +78,85 @@ test("Azure Global Standard mini pricing and historical repricing", () => {
 		}),
 		20.3,
 	);
+});
+
+test("2.1 estimates match all eight published Azure Global Standard meters", () => {
+	const evidence = JSON.parse(readFileSync(join(__dirname, "azure-realtime-2.1-pricing.json"), "utf8"));
+	assert.equal(evidence.meters.length, 8);
+	for (const meter of evidence.meters) {
+		assert.equal(meter.currencyCode, "USD");
+		assert.equal(meter.unitOfMeasure, "1M");
+		const match = /^gpt-realtime-2.1 (Text|Audio|Image) (inp|cd inp|opt) Gl 1M Tokens$/.exec(meter.meterName)!;
+		assert.ok(match);
+		const modality = match[1].toLowerCase();
+		const input: any = emptyUsageBreakdown(),
+			output: any = emptyUsageBreakdown();
+		(match[2] === "opt" ? output : input)[`${modality}Tokens`] = 1_000_000;
+		if (match[2] === "cd inp") input[`cached${match[1]}Tokens`] = 1_000_000;
+		assert.equal(
+			estimateUsageCost({ provider: "openai", model: "gpt-realtime-2.1", source: "response", input, output }),
+			meter.retailPrice,
+		);
+	}
+});
+
+const azureResponse = (): any => ({
+	response: {
+		id: "pricing-fixture",
+		usage: {
+			input_tokens: 3500,
+			output_tokens: 300,
+			total_tokens: 3800,
+			input_token_details: {
+				text_tokens: 1000,
+				audio_tokens: 2000,
+				image_tokens: 500,
+				cached_tokens: 2200,
+				cached_tokens_details: { text_tokens: 600, audio_tokens: 1500, image_tokens: 100 },
+			},
+			output_token_details: { text_tokens: 100, audio_tokens: 200, reasoning_tokens: 50 },
+		},
+	},
+});
+const normalizeAzure = (event: any) =>
+	usageFromOpenAIResponseDone(event, { providerSessionId: "voice", model: "gpt-realtime-2.1", at: 1 })!;
+
+test("2.1 pricing uses returned modalities and cache reads without double counting; old unknown observations reprice", () => {
+	const observation = normalizeAzure(azureResponse());
+	assert.equal(observation.costExcludedReason, undefined);
+	assert.ok(Math.abs(observation.estimatedCostUsd - 0.03569) < 1e-12);
+	assert.equal(formatUsageCost(aggregateUsage([observation])), "$0.0357 (api)");
+	const old = {
+		...observation,
+		estimatedCostUsd: 0,
+		costExcludedReason: "No local pricing table for model gpt-realtime-2.1.",
+	};
+	assert.ok(Math.abs(aggregateUsage([old]).estimatedCostUsd - 0.03569) < 1e-12);
+	assert.equal(old.estimatedCostUsd, 0);
+});
+
+test("missing or inconsistent returned usage is unknown, never a falsely precise zero", () => {
+	for (const change of [
+		(event: any) => {
+			delete event.response.usage.input_token_details.cached_tokens_details;
+		},
+		(event: any) => {
+			delete event.response.usage.output_token_details;
+		},
+		(event: any) => {
+			event.response.usage.total_tokens = 4000;
+		},
+		(event: any) => {
+			event.response.usage.input_token_details.cached_tokens_details.audio_tokens = 2500;
+		},
+	]) {
+		const event = azureResponse();
+		change(event);
+		const observation = normalizeAzure(event);
+		assert.match(observation.costExcludedReason!, /Incomplete or inconsistent/);
+		assert.equal(formatUsageCost(aggregateUsage([observation])), "cost unknown");
+		assert.match(formatUsageCost(aggregateUsage([observation, normalizeAzure(azureResponse())])), /partial/);
+	}
 });
 
 const row = (unknown: boolean): any => ({

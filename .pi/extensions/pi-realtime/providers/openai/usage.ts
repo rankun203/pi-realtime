@@ -35,7 +35,12 @@ function observation(args: {
 	const inputBreakdown = inputBreakdownFrom(record(args.usage.input_token_details));
 	const outputBreakdown = outputBreakdownFrom(record(args.usage.output_token_details));
 	const base = { provider: "openai" as const, model: args.input.model, source: args.source };
-	const estimatedCostUsd = estimateUsageCost({ ...base, input: inputBreakdown, output: outputBreakdown });
+	const excludedReason =
+		(args.source === "response" ? responseUsageGap(args.usage, inputBreakdown, outputBreakdown) : undefined) ??
+		costExcludedReason(base);
+	const estimatedCostUsd = excludedReason
+		? 0
+		: estimateUsageCost({ ...base, input: inputBreakdown, output: outputBreakdown });
 	return {
 		providerSessionId: args.input.providerSessionId,
 		provider: "openai",
@@ -49,8 +54,37 @@ function observation(args: {
 		output: outputBreakdown,
 		totalTokens: numberValue(args.usage.total_tokens),
 		estimatedCostUsd,
-		costExcludedReason: costExcludedReason(base),
+		costExcludedReason: excludedReason,
 	};
+}
+
+// Missing modality/cache detail must not silently become zero-dollar usage.
+// Azure reports cache reads as a subset of input, not additional input tokens.
+function responseUsageGap(
+	usage: Record<string, unknown>,
+	input: UsageBreakdown,
+	output: UsageBreakdown,
+): string | undefined {
+	const details = record(usage.input_token_details);
+	const counts = [usage.input_tokens, usage.output_tokens, usage.total_tokens, details?.cached_tokens];
+	const inputCount = input.textTokens + input.audioTokens + input.imageTokens;
+	const outputCount = output.textTokens + output.audioTokens + output.imageTokens;
+	const cacheCount = input.cachedTextTokens + input.cachedAudioTokens + input.cachedImageTokens;
+	if (
+		[...counts, ...Object.values(input), ...Object.values(output)].some(
+			(value) => typeof value !== "number" || !Number.isSafeInteger(value) || value < 0,
+		) ||
+		inputCount !== usage.input_tokens ||
+		outputCount !== usage.output_tokens ||
+		inputCount + outputCount !== usage.total_tokens ||
+		cacheCount !== details?.cached_tokens ||
+		input.cachedTextTokens > input.textTokens ||
+		input.cachedAudioTokens > input.audioTokens ||
+		input.cachedImageTokens > input.imageTokens
+	)
+		return "Incomplete or inconsistent provider token/cache breakdown; cost excluded.";
+	if (output.imageTokens > 0) return "No verified price for realtime image output; cost excluded.";
+	return undefined;
 }
 
 function inputBreakdownFrom(details: Record<string, unknown> | undefined): UsageBreakdown {

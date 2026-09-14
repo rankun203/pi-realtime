@@ -397,6 +397,30 @@ test("companion: provider close cause survives heartbeat without affecting a new
 	}
 });
 
+test("companion: telemetry follows device leases and excludes out-of-band readback context", async () => {
+	const f = fixture();
+	try {
+		assert.equal(f.companion.status().expiresAt, undefined);
+		const first = await f.companion.connect("v=0");
+		const deadline = f.companion.status().expiresAt!;
+		f.advance(1000);
+		assert.equal(f.companion.status().expiresAt, deadline);
+		const c = f.connections[0];
+		c.emit({ type: "session.created", session: { expires_at: 9000 } });
+		assert.equal(f.companion.status().expiresAt, 9000000);
+		c.emit({ type: "response.done", response: { conversation_id: "native", usage: { input_tokens: 8000 } } });
+		c.emit({ type: "response.done", response: { conversation_id: null, usage: { input_tokens: 500 } } });
+		assert.equal(f.companion.status().contextInputTokens, 8000);
+		await f.companion.release(first.lease);
+		assert.equal(f.companion.status().expiresAt, undefined);
+		await f.companion.connect("v=0");
+		assert.equal(f.companion.status().contextInputTokens, undefined);
+		assert.equal(f.companion.status().expiresAt, deadline + 1000);
+	} finally {
+		await f.cleanup();
+	}
+});
+
 test("companion: startup never dumps the entire Pi or voice history", () => {
 	const messages = Array.from({ length: 500 }, (_, i) => ({
 		id: String(i),

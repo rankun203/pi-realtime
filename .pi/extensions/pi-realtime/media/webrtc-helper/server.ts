@@ -1,4 +1,5 @@
 import { homedir } from "node:os";
+import { openAIContextWindowForModel } from "../../providers/openai/model-profiles";
 import { VoiceCompanion } from "../../companion/runtime";
 import { openAIVoiceTransport } from "../../companion/openai";
 import type { VoiceTransport } from "../../companion/types";
@@ -223,6 +224,17 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		return `http://${HOST}:${this.port}/pi-realtime/openai/${encodeURIComponent(providerSessionId)}`;
 	}
 
+	voiceTelemetry() {
+		const status = this.companion?.status();
+		if (!this.companionOwner || !status?.connected || status.expiresAt === undefined) return undefined;
+		return {
+			providerSessionId: this.companionOwner,
+			expiresAt: status.expiresAt,
+			contextInputTokens: status.contextInputTokens,
+			// Verified published windows, not an assumption for arbitrary deployment aliases.
+			contextWindowTokens: openAIContextWindowForModel(status.model),
+		};
+	}
 	status(): string {
 		if (!this.server || !this.port) return "webrtc helper: stopped";
 		const rows = [...this.sessions.values()].map(

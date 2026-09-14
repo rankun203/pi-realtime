@@ -1,4 +1,5 @@
 import type { ExtensionContext } from "@earendil-works/pi-coding-agent";
+import type { VoiceTelemetry } from "./providers/runtime-types";
 import { branchChatMessages } from "./dashboard";
 import { formatUsageCost } from "./usage";
 import { createAudioManager, type AudioManager, type AudioManagerErrorKind } from "./audio-manager";
@@ -58,6 +59,7 @@ import { aggregateUsage, renderStatusText, renderUsageSummary } from "./view";
 export type Service = {
 	refresh(ctx: ExtensionContext): void;
 	state(): RealtimeState;
+	voiceTelemetry(): VoiceTelemetry | undefined;
 	toolSurface(): VoiceToolSurface;
 	statusText(): string;
 	realtimeStatusText(providerSessionId?: ProviderSessionId): string;
@@ -147,6 +149,13 @@ class RealtimeService implements Service {
 	}
 	state(): RealtimeState {
 		return this.store.state();
+	}
+	voiceTelemetry(): VoiceTelemetry | undefined {
+		for (const provider of this.providers.list()) {
+			const telemetry = provider.media?.webrtc?.voiceTelemetry?.();
+			if (telemetry) return telemetry;
+		}
+		return undefined;
 	}
 	toolSurface(): VoiceToolSurface {
 		return toolSurfaceFor(this.defaultInteractionMode());

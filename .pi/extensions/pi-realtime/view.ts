@@ -1,9 +1,10 @@
+import type { VoiceTelemetry } from "./providers/runtime-types";
 import type { RealtimeState } from "./types";
 import { aggregateUsage, formatUsageCost } from "./usage";
 
 export { aggregateUsage, renderUsageSummary } from "./usage";
 
-export function statusText(state: RealtimeState): string | undefined {
+export function statusText(state: RealtimeState, telemetry?: VoiceTelemetry, now = Date.now()): string | undefined {
 	const sessions = [...state.sessions.values()];
 	const active = sessions.filter((session) => session.status === "active" || session.status === "starting");
 	if (active.length === 0) return undefined;
@@ -21,7 +22,19 @@ export function statusText(state: RealtimeState): string | undefined {
 		: status;
 	// Show running models, not the preference used for future calls.
 	const models = [...new Set(active.map((session) => session.model))].join(", ");
-	return `${summary} · ${models}`;
+	const indicators: string[] = [];
+	if (telemetry && active.some((session) => session.providerSessionId === telemetry.providerSessionId)) {
+		if (telemetry.contextWindowTokens) {
+			const percent =
+				telemetry.contextInputTokens === undefined
+					? "?"
+					: `~${Math.round((telemetry.contextInputTokens / telemetry.contextWindowTokens) * 100)}%`;
+			indicators.push(`C${percent}/${compactTokens(telemetry.contextWindowTokens)}`);
+		}
+		const seconds = Math.max(0, Math.ceil((telemetry.expiresAt - now) / 1000));
+		indicators.push(`T${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, "0")}`);
+	}
+	return [summary, ...indicators, models].join(" · ");
 }
 
 function compactTokens(count: number): string {

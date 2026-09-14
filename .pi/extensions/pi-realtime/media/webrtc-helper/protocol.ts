@@ -1,3 +1,4 @@
+import type { VoiceTelemetry } from "../../providers/runtime-types";
 import type { DashboardBridge } from "../../dashboard";
 import type { DebugTraceRecorder } from "../../debug-trace";
 import type {
@@ -66,6 +67,7 @@ export type WebRTCHelperSink = {
 export type WebRTCHelperServer = {
 	setDashboard?(bridge: DashboardBridge): void;
 	isCompanion?(providerSessionId: ProviderSessionId): boolean;
+	voiceTelemetry?(): VoiceTelemetry | undefined;
 	start(): Promise<void>;
 	stop(): Promise<void>;
 	registerSession(config: WebRTCHelperRegistrationConfig, sink: WebRTCHelperSink): void;

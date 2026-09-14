@@ -90,6 +90,9 @@ function createOpenAIWebRTCMediaRuntime(deps: {
 			// is intentionally coarse because the helper owns only OpenAI WebRTC media.
 			if (!providerSessionId) await deps.webrtcHelper.stop();
 		},
+		voiceTelemetry() {
+			return deps.webrtcHelper.voiceTelemetry?.();
+		},
 		status() {
 			return deps.webrtcHelper.status();
 		},
