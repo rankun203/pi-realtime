@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createService } from "../../.pi/extensions/pi-realtime/service";
-import { handleRealtimeCommand } from "../../.pi/extensions/pi-realtime/commands";
+import { handleRealtimeCommand, realtimeCompletions } from "../../.pi/extensions/pi-realtime/commands";
+import { OPENAI_REALTIME_MODELS } from "../../.pi/extensions/pi-realtime/providers/openai/model-profiles";
 import { applyEvent, createInitialState } from "../../.pi/extensions/pi-realtime/events";
 import { emptyUsageBreakdown } from "../../.pi/extensions/pi-realtime/usage";
 import { statusText } from "../../.pi/extensions/pi-realtime/view";
@@ -44,6 +45,22 @@ function fixture(autoMediaMode?: string) {
 	} as any;
 	return { calls, messages, ctx, service };
 }
+
+test("model completions and both help surfaces stay aligned with the model catalog", async () => {
+	assert.deepEqual(
+		realtimeCompletions().filter((value) => value.startsWith("openai model ")),
+		OPENAI_REALTIME_MODELS.map((model) => `openai model ${model}`),
+	);
+	assert.ok(realtimeCompletions().includes("openai model gpt-realtime-2.1"));
+	const f = fixture();
+	f.service.state = () => ({
+		sessions: new Map([["voice", { providerSessionId: "voice", provider: "openai", status: "active" }]]),
+	});
+	await handleRealtimeCommand("help", f.ctx, f.service);
+	await handleRealtimeCommand("openai invalid", f.ctx, f.service);
+	for (const message of f.messages) assert.ok(message.text.includes(OPENAI_REALTIME_MODELS.join("|")));
+	assert.equal(f.messages.length, 2);
+});
 
 test("bare stop shuts down every session and shared media; explicit session stop stays scoped", async () => {
 	for (const command of ["stop", "stop --session first"]) {

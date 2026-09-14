@@ -1,6 +1,7 @@
 import type { ExtensionCommandContext } from "@earendil-works/pi-coding-agent";
 import type { Service } from "./service";
 import { parseInteractionMode } from "./domain/interaction-modes";
+import { OPENAI_REALTIME_MODELS } from "./providers/openai/model-profiles";
 import type { ProviderKind, ProviderSessionId, RealtimeInteractionModeId, VoiceToolName } from "./types";
 
 type RealtimeCommandHandler = (
@@ -79,8 +80,7 @@ export function realtimeCompletions(): string[] {
 		"openai",
 		"openai start --mode eco",
 		"openai model",
-		"openai model gpt-realtime-mini",
-		"openai model gpt-realtime-2",
+		...OPENAI_REALTIME_MODELS.map((model) => `openai model ${model}`),
 		"openai stop",
 		"openai text",
 		"openai mic start",
@@ -279,7 +279,7 @@ async function openai(tokens: string[], ctx: ExtensionCommandContext, service: S
 	if (subcommand === "webrtc") return webrtc(rest, ctx, service, openaiSession.providerSessionId);
 	return notify(
 		ctx,
-		"Usage: /realtime openai [start|stop] | openai model [gpt-realtime-mini|gpt-realtime-2] | openai text <message> | openai mic start|stop|status | openai audio start|stop|status | openai webrtc start|stop|status",
+		`Usage: /realtime openai [start|stop] | openai model [${OPENAI_REALTIME_MODELS.join("|")}] | openai text <message> | openai mic start|stop|status | openai audio start|stop|status | openai webrtc start|stop|status`,
 		"warning",
 	);
 }
@@ -453,7 +453,7 @@ function helpText(): string {
 		"/realtime — start voice when idle; otherwise show status and options",
 		"/realtime start — start or reuse agent-mode browser voice chat",
 		"/realtime status — show session history without starting voice",
-		"/realtime openai model [gpt-realtime-mini|gpt-realtime-2] — show or set the default OpenAI realtime model for future sessions",
+		`/realtime openai model [${OPENAI_REALTIME_MODELS.join("|")}] — show or set the model/deployment name for future sessions; availability depends on your endpoint`,
 		"/realtime openai text <message> — send text to the active OpenAI session",
 		"/realtime openai mic start|stop|status — stream local microphone to the active OpenAI session",
 		"/realtime openai audio start|stop|status — play OpenAI audio responses",
