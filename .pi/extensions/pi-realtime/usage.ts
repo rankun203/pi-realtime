@@ -139,7 +139,7 @@ function latestResetAt(resets: readonly UsageReset[], providerSessionId?: Provid
 export function formatUsageCost(summary: UsageSummary): string {
 	if (summary.observations === 0) return "cost pending";
 	if (summary.excludedCostCount === summary.observations) return "cost unknown";
-	return `$${summary.estimatedCostUsd.toFixed(6)} est.${summary.excludedCostCount ? " (partial; unpriced usage excluded)" : ""}`;
+	return `$${summary.estimatedCostUsd.toFixed(4)} est.${summary.excludedCostCount ? " (partial; unpriced usage excluded)" : ""}`;
 }
 
 export function renderUsageSummary(summary: UsageSummary, details = false): string {

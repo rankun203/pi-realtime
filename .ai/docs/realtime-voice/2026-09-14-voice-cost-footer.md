@@ -23,6 +23,10 @@ A regression test reproduces the recorded ordering through the service and real 
 
 65 deterministic tests and TypeScript validation pass. The prior full-gate blockers remain: missing `sentrux`, an absent validation design-note reference, and the absent required extension-development skill. No gate was disabled or reported as passing despite those blockers.
 
+## Display precision follow-up
+
+The user requested four decimal places for cost estimates. The shared formatter now renders `$0.002677` as `$0.0027`, retaining full precision in stored usage and calculations. Regression tests cover rounding and unchanged accounting; unknown/partial-pricing labels remain unchanged.
+
 ## Limitations and handoff
 
 No persisted history was rewritten and the live user call was not disrupted. Existing incorrectly stopped session state needs a fresh call after `/realtime stop`, `/reload`, and `/realtime`. `/realtime usage` can display already-recorded estimates in the meantime. Estimates remain list-price estimates, not an Azure invoice. The fix adds no compatibility bridge or new pricing debt.
