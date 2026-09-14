@@ -51,6 +51,7 @@ const messagePollTimer = setInterval(() => pollMessages().catch(showChatError), 
 window.addEventListener("pagehide", () => clearInterval(messagePollTimer));
 
 async function start() {
+	document.getElementById("notice").textContent = "";
 	setStatus("Connecting…", "warn");
 	cleanupCurrentConnection();
 	startButton.disabled = true;
@@ -158,6 +159,32 @@ function releaseVoiceLease(lease) {
 async function startCompanion(config, epoch) {
 	const pc = new RTCPeerConnection();
 	currentPc = pc;
+	let mediaConnected = false;
+	const updatePeerState = () => {
+		if (epoch !== connectionEpoch) return;
+		log(`WebRTC peer=${pc.connectionState} ICE=${pc.iceConnectionState}`);
+		if (pc.connectionState === "connected") {
+			mediaConnected = true;
+			setStatus(`Voice connected · ${config.model}`, "status");
+			document.getElementById("notice").textContent = "";
+			window.parent.postMessage({ type: "pi-agents-call", active: true }, location.origin);
+		} else if (pc.connectionState === "failed") {
+			void endFailedCompanion(
+				pc,
+				epoch,
+				"WebRTC media connection failed. Check the network/VPN/firewall path to the provider.",
+				mediaConnected,
+			);
+		} else if (pc.connectionState === "disconnected") {
+			setStatus("Voice media interrupted · reconnecting…", "warn");
+		} else {
+			setStatus("Connecting voice media…", "warn");
+		}
+	};
+	pc.onconnectionstatechange = updatePeerState;
+	pc.oniceconnectionstatechange = () => {
+		if (epoch === connectionEpoch) log(`WebRTC ICE=${pc.iceConnectionState}`);
+	};
 	document.getElementById("hangup").disabled = false;
 	pc.ontrack = (event) => {
 		if (epoch !== connectionEpoch) return;
@@ -198,9 +225,8 @@ async function startCompanion(config, epoch) {
 	voiceLease = result.lease;
 	await pc.setRemoteDescription({ type: "answer", sdp: result.answer });
 	if (epoch !== connectionEpoch) return;
-	setStatus(`Voice connected · ${config.model}`, "status");
-	document.getElementById("notice").textContent = "";
-	window.parent.postMessage({ type: "pi-agents-call", active: true }, location.origin);
+	// SDP acceptance only proves signaling worked; media connectivity is a separate handshake.
+	updatePeerState();
 	voiceHeartbeat = setInterval(async () => {
 		if (voiceHeartbeatInFlight || epoch !== connectionEpoch) return;
 		voiceHeartbeatInFlight = true;
@@ -223,15 +249,42 @@ async function startCompanion(config, epoch) {
 				await start();
 			}
 		} catch (error) {
-			if (epoch === connectionEpoch) {
-				cleanupCurrentConnection();
-				setStatus("Voice disconnected · reconnect when ready", "warn");
-				log(error.message);
-			}
+			if (epoch === connectionEpoch) await endFailedCompanion(pc, epoch, error.message, mediaConnected);
 		} finally {
 			voiceHeartbeatInFlight = false;
 		}
 	}, 3000);
+}
+
+async function endFailedCompanion(pc, epoch, reason, connected) {
+	const peerState = pc.connectionState;
+	const iceState = pc.iceConnectionState;
+	try {
+		// Packet counts and ICE outcomes suffice; never log SDP, device addresses, or credentials.
+		const stats = [...(await pc.getStats()).values()];
+		const media = stats
+			.filter((s) => ["inbound-rtp", "outbound-rtp", "candidate-pair"].includes(s.type))
+			.map((s) => ({
+				type: s.type,
+				state: s.state,
+				packetsSent: s.packetsSent,
+				packetsReceived: s.packetsReceived,
+				requestsSent: s.requestsSent,
+				responsesReceived: s.responsesReceived,
+			}));
+		if (epoch === connectionEpoch)
+			log(`WebRTC diagnostics: ${JSON.stringify({ peer: peerState, ice: iceState, media })}`);
+	} catch {
+		// Diagnostics must never prevent releasing a failed call.
+	}
+	if (epoch !== connectionEpoch) return;
+	cleanupCurrentConnection();
+	setStatus(
+		connected ? "Voice disconnected · reconnect when ready" : "Voice disconnected · media connection did not establish",
+		"warn",
+	);
+	document.getElementById("notice").textContent = reason;
+	log(reason);
 }
 
 async function pollMessages() {

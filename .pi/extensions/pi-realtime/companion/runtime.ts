@@ -21,6 +21,8 @@ type Lease = {
 };
 export class VoiceCompanion {
 	private lease?: Lease;
+	// Only the most recently retired device can retrieve its own disconnect cause.
+	private lastDetached?: { token: string; reason: string };
 	private operations: Promise<unknown> = Promise.resolve();
 	private memory: VoiceMemory;
 	private readonly path: string;
@@ -66,7 +68,7 @@ export class VoiceCompanion {
 		}
 		this.timer = setInterval(() => {
 			void this.tick()
-				.catch(() => this.detach())
+				.catch(() => this.detach("Voice supervision failed"))
 				.catch(() => {});
 		}, 1000);
 		this.timer.unref();
@@ -99,7 +101,7 @@ export class VoiceCompanion {
 				throw Object.assign(new Error("Another device owns this voice conversation. Explicit takeover required."), {
 					statusCode: 409,
 				});
-			await this.detach();
+			await this.detach("Another device took over the voice conversation");
 			await this.observe();
 			if (this.closed) throw new Error("Pi session changed; open its own voice companion");
 			const lease: Lease = {
@@ -124,8 +126,8 @@ export class VoiceCompanion {
 					instructions: companionInstructions(),
 					tools: companionTools(),
 					onEvent: (event) => this.onEvent(lease, event),
-					onClose: () => {
-						if (this.lease === lease) void this.detach().catch(() => {});
+					onClose: (reason) => {
+						if (this.lease === lease) void this.detach(reason ?? "Provider control connection closed").catch(() => {});
 					},
 				});
 				if (this.lease !== lease || this.closed) {
@@ -156,19 +158,24 @@ export class VoiceCompanion {
 		return operation;
 	}
 	heartbeat(token: string) {
-		if (!this.lease || this.lease.token !== token)
-			throw Object.assign(new Error("Device lease expired or taken over"), { statusCode: 409 });
+		if (!this.lease || this.lease.token !== token) {
+			const reason =
+				this.lastDetached?.token === token ? this.lastDetached.reason : "Device lease expired or taken over";
+			throw Object.assign(new Error(reason), { statusCode: 409 });
+		}
 		this.lease.seenAt = this.now();
 		return this.status();
 	}
 	async release(token: string): Promise<void> {
 		if (this.lease?.token === token) await this.detach();
 	}
-	async detach(): Promise<void> {
+	async detach(reason = "Voice device released the call"): Promise<void> {
 		const lease = this.lease;
 		this.lease = undefined;
 		if (!lease) return;
+		this.lastDetached = { token: lease.token, reason };
 		try {
+			this.options.onEvent?.({ type: "voice.detached", reason });
 			this.save();
 		} finally {
 			try {
@@ -183,14 +190,14 @@ export class VoiceCompanion {
 	async close(): Promise<void> {
 		this.closed = true;
 		clearInterval(this.timer);
-		await this.detach();
+		await this.detach("Pi voice companion shut down");
 	}
 	async tick(): Promise<void> {
 		await this.observe();
 		const lease = this.lease;
 		if (!lease) return;
 		if (this.now() - lease.seenAt > 45000) {
-			await this.detach();
+			await this.detach("Device heartbeat expired after 45 seconds");
 			return;
 		}
 		const age = this.now() - lease.startedAt;
@@ -215,7 +222,7 @@ export class VoiceCompanion {
 			try {
 				this.save();
 			} finally {
-				await this.detach();
+				await this.detach("Pi session branch changed");
 			}
 			return;
 		}
@@ -342,6 +349,7 @@ export class VoiceCompanion {
 	}
 	private async runTool(lease: Lease, event: VoiceEvent): Promise<void> {
 		let result: unknown;
+		let requestResponse = true;
 		try {
 			await this.observe(); // Recheck Pi scope at execution time, not only on the polling interval.
 			const args = JSON.parse(event.arguments ?? "{}");
@@ -366,6 +374,7 @@ export class VoiceCompanion {
 				this.memory.turns = this.memory.turns.slice(-24);
 				this.save();
 				result = { posted: true, delivery: "queued", note: "Pi continues normally. Observe its forthcoming output." };
+				requestResponse = false;
 			} else if (event.name === "get_pi_status") {
 				const pi = this.options.bridge.snapshot();
 				result = {
@@ -399,6 +408,8 @@ export class VoiceCompanion {
 			type: "conversation.item.create",
 			item: { type: "function_call_output", call_id: event.call_id, output: JSON.stringify(result) },
 		});
-		lease.pending = true;
+		// A queued receipt has nothing to narrate. Pi progress/results schedule their own
+		// response through observe(); do not clear an update already pending there.
+		if (requestResponse) lease.pending = true;
 	}
 }

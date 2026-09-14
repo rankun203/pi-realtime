@@ -91,6 +91,7 @@ async function main() {
 		sent: VoiceEvent[];
 		events: VoiceEvent[];
 		closed: boolean;
+		providerCloseReason?: string;
 		emit: (event: VoiceEvent) => void;
 		send?: (event: VoiceEvent) => void;
 	}[] = [];
@@ -111,7 +112,14 @@ async function main() {
 			};
 			record.emit = event;
 			const connection = live
-				? await openAIVoiceTransport().connect({ ...input, onEvent: event })
+				? await openAIVoiceTransport().connect({
+						...input,
+						onEvent: event,
+						onClose: (reason) => {
+							Object.assign(record, { providerCloseReason: reason });
+							input.onClose(reason);
+						},
+					})
 				: { answer: "v=0\r\n", send(_event: VoiceEvent) {}, async close() {} };
 			const send = (e: VoiceEvent) => {
 				record.sent.push(e);

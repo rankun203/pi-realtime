@@ -77,11 +77,19 @@ export function openAIVoiceTransport(): VoiceTransport {
 					/* Malformed provider event is not a user instruction. */
 				}
 			});
-			ws.on("close", () => {
-				if (!closing) input.onClose();
+			ws.on("close", (code, reason) => {
+				if (!closing)
+					input.onClose(
+						`Provider control connection closed (${code}): ${
+							reason
+								.toString()
+								.replace(/[\r\n\t]/g, " ")
+								.slice(0, 200) || "no reason supplied"
+						}`,
+					);
 			});
 			ws.on("error", () => {
-				if (!closing && ws.readyState === WebSocket.OPEN) input.onClose();
+				if (!closing && ws.readyState === WebSocket.OPEN) input.onClose("Provider control connection failed");
 			});
 			try {
 				await new Promise<void>((resolve, reject) => {

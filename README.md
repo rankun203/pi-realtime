@@ -265,6 +265,14 @@ Log in at the proxy, grant microphone permission, and keep the page in the foreg
 
 When the Pi voice session changes, open its new session URL. The fixed server port and proxy configuration can stay the same. This repository supplies deployment support and examples; it does not automatically publish your server or provision DNS/TLS/access-control credentials.
 
+## Troubleshooting silent or disconnected browser calls
+
+A successful API-key check or SDP negotiation does **not** prove that browser audio can reach the provider. The browser now shows **Connecting voice media** until the WebRTC peer actually connects. On failure, the page preserves the provider/heartbeat error and logs ICE state and packet counters under **Debug events**. SDP, credentials, and device addresses are not included in those counters.
+
+If microphone capture succeeds but ICE stays `checking` with zero audio packets, inspect the call in `chrome://webrtc-internals` (open it before starting a call). Check whether connectivity requests receive replies. The browser connects directly to the media candidates supplied by the provider; working HTTPS access to the API or helper does not establish that this separate route is available. In one Azure reproduction, the advertised UDP/TCP endpoint used port 3478 and received no replies on the local network; the provider control socket subsequently closed with `observer_writer_exit`. This is evidence about that route, not a universal interpretation of that close reason. Ask your network administrator to permit the provider's documented media traffic, or compare on another permitted network. Do not disable security controls or hardcode an observed media IP in the extension.
+
+A `409` from `voice-heartbeat` means the device lease is no longer active. It can result from takeover, missing heartbeats, a branch change, or a provider disconnect; the most recently detached device now receives its recorded reason. Retrying a revoked lease does not repair a failed media path. `0:00` in the audio player is playback position, not call duration.
+
 ## Development
 
 Use nvm, Corepack, and the pinned pnpm version:

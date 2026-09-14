@@ -7,6 +7,7 @@ const result = spawnSync(
 		"--test",
 		".ai/validation/config.test.ts",
 		".ai/validation/companion.test.ts",
+		".ai/validation/companion-browser.test.ts",
 		".ai/validation/native-agent.test.ts",
 		".ai/validation/start-command.test.ts",
 		".ai/validation/view.test.ts",

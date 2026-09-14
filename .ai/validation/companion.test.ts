@@ -21,6 +21,7 @@ function fixture(directory = mkdtempSync(join(tmpdir(), "pi-companion-test-"))) 
 		connections: {
 			sent: VoiceEvent[];
 			emit: (event: VoiceEvent) => void;
+			providerClose: (reason?: string) => void;
 			closed: boolean;
 			closeWait?: Promise<void>;
 		}[] = [];
@@ -34,7 +35,12 @@ function fixture(directory = mkdtempSync(join(tmpdir(), "pi-companion-test-"))) 
 	};
 	const transport: VoiceTransport = {
 		async connect(input) {
-			const connection: (typeof connections)[number] = { sent: [], emit: input.onEvent, closed: false };
+			const connection: (typeof connections)[number] = {
+				sent: [],
+				emit: input.onEvent,
+				providerClose: input.onClose,
+				closed: false,
+			};
 			connections.push(connection);
 			return {
 				answer: "v=0\r\n",
@@ -85,6 +91,90 @@ test("companion: explicit takeover invalidates old tools and release tokens", as
 		f.connections[1].emit(tool("post_message", { message: "Please inspect tests", origin: "user" }));
 		await settle();
 		assert.deepEqual(f.posted, [{ message: "Please inspect tests", origin: "user" }]);
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test("companion: queued receipts stay silent, but intermediate and final Pi messages speak once", async () => {
+	const f = fixture();
+	try {
+		await f.companion.connect("v=0");
+		const c = f.connections[0];
+		c.emit(tool("post_message", { message: "Run the checks", origin: "user" }));
+		await settle();
+		await f.companion.tick();
+		assert.ok(c.sent.some((e) => e.item?.type === "function_call_output" && JSON.parse(e.item.output).posted));
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 0, "receipt must not solicit speculation");
+		f.pi.busy = true;
+		f.pi.messages.push({
+			id: "progress",
+			role: "assistant",
+			text: "Tests passed. I am committing locally; nothing will be pushed.",
+			at: 1,
+		});
+		await f.companion.tick();
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 1, "progress is spoken while Pi is busy");
+		assert.ok(
+			c.sent.some((e) => e.item?.content?.[0]?.text.includes(f.pi.messages[0].text)),
+			"the original Pi message reaches voice unchanged",
+		);
+		c.emit({ type: "response.done" });
+		await f.companion.tick();
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 1, "unchanged progress is not repeated");
+		f.pi.busy = false;
+		f.pi.messages.push({ id: "final", role: "assistant", text: "Committed locally. Nothing was pushed.", at: 2 });
+		await f.companion.tick();
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 2);
+		assert.equal(f.posted.length, 1, "observations never trigger new Pi work");
+	} finally {
+		await f.cleanup();
+	}
+});
+
+test("companion: a slow posting receipt cannot erase Pi progress already pending", async () => {
+	const f = fixture();
+	let release!: () => void;
+	try {
+		await f.companion.connect("v=0");
+		f.bridge.postMessage = () =>
+			new Promise<void>((resolve) => {
+				release = resolve;
+			});
+		const c = f.connections[0];
+		c.emit(tool("post_message", { message: "Run checks", origin: "user" }));
+		await settle();
+		f.pi.messages.push({ id: "fast-progress", role: "assistant", text: "Checking the tests.", at: 1 });
+		await f.companion.tick();
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 0);
+		release();
+		await settle();
+		await f.companion.tick();
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 1);
+	} finally {
+		release?.();
+		await f.cleanup();
+	}
+});
+
+test("companion: failed posts and requested history still schedule a voice response", async () => {
+	const f = fixture();
+	try {
+		await f.companion.connect("v=0");
+		const c = f.connections[0];
+		f.bridge.postMessage = async () => {
+			throw new Error("Posting failed");
+		};
+		c.emit(tool("post_message", { message: "Run checks", origin: "user" }));
+		await settle();
+		await f.companion.tick();
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 1);
+		assert.ok(c.sent.some((e) => e.item?.output?.includes("Posting failed")));
+		c.emit({ type: "response.done" });
+		c.emit(tool("read_pi_history", { limit: 4 }, "details"));
+		await settle();
+		await f.companion.tick();
+		assert.equal(c.sent.filter((e) => e.type === "response.create").length, 2, "requested details can still be spoken");
 	} finally {
 		await f.cleanup();
 	}
@@ -238,6 +328,26 @@ test("companion: slow old-branch teardown cannot overwrite a fresh device's memo
 		assert.match(f.connections[2].sent[0].item.content[0].text, /Fresh branch context/);
 	} finally {
 		release?.();
+		await f.cleanup();
+	}
+});
+
+test("companion: provider close cause survives heartbeat without affecting a newer device", async () => {
+	const f = fixture();
+	try {
+		const first = await f.companion.connect("v=0");
+		f.connections[0].providerClose("Provider control connection closed (1000): media timeout");
+		await settle();
+		assert.ok(f.connections[0].closed);
+		assert.throws(() => f.companion.heartbeat(first.lease), /media timeout/);
+		assert.throws(() => f.companion.heartbeat("unknown-token"), /expired or taken over/);
+		const second = await f.companion.connect("v=0");
+		f.connections[0].providerClose("stale close");
+		assert.ok(f.companion.heartbeat(second.lease).connected);
+		f.advance(46000);
+		await f.companion.tick();
+		assert.throws(() => f.companion.heartbeat(second.lease), /heartbeat expired after 45 seconds/);
+	} finally {
 		await f.cleanup();
 	}
 });

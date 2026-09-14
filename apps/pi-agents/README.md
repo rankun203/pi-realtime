@@ -25,7 +25,7 @@ This version lists **helper-enabled sessions**, not every arbitrary Pi process. 
 
 ## Server-owned voice companion
 
-In browser agent mode, the helper hosts the voice runtime. Pi remains the work authority, and voice independently chooses what to say about Pi's ordinary visible output. Voice uses `post_message(message, origin)` to queue user-directed or voice-initiated messages without steering an active Pi turn; `get_pi_status` and `read_pi_history` inspect work without starting a new turn. Special `realtime_send_*` tools are unnecessary and are skipped in companion mode. Legacy raw/eco transports retain their existing behavior.
+In browser agent mode, the helper hosts the voice runtime. Pi remains the work authority and its output is unchanged. Voice faithfully reads back Pi's ordinary visible progress and results, lightly shortened for speech rather than adding its own investigation. Progress can be spoken while Pi is busy. A successful `post_message` queue receipt alone does not schedule another response; actual Pi updates do. Failed posts and requested history lookups still receive a response. Follow-up questions can use the original visible messages or bounded history; spoken summaries do not replace those messages. Voice uses `post_message(message, origin)` to queue user-directed or voice-initiated messages without steering an active Pi turn; `get_pi_status` and `read_pi_history` inspect work without starting a new turn. Special `realtime_send_*` tools are unnecessary and are skipped in companion mode. Legacy raw/eco transports retain their existing behavior.
 
 - Devices negotiate through the helper; provider credentials and sideband tool execution remain server-side. Audio is still direct WebRTC between device and provider.
 - End call, tab closure, or a missing device heartbeat closes provider resources. A takeover revokes the old lease; stale events cannot post new work. Lease expiry is 45 seconds for disappearance without a usable unload notification.
@@ -51,7 +51,17 @@ PI_COMPANION_LIVE=1 PI_COMPANION_AUDIO=/absolute/path/to/synthetic-request.wav \
   uv run --no-project --with playwright python .ai/validation/companion-browser-smoke.py
 ```
 
-The live test incurs provider token charges and checks an utterance asking Pi to inspect files. The fixture Pi model returns `apple.txt` and `pear.txt`; it never runs tools against your real workspace. Tests run isolated temporary sessions, not your active Pi conversation. Chromium requires its normal OS libraries.
+The live test incurs provider token charges and checks an utterance asking Pi to inspect files. It requires a connected WebRTC peer, audio packets in both directions, playback progress, and stability beyond the reproduced 30-second connection-failure window; a status label alone cannot pass it. The fixture Pi model returns `apple.txt` and `pear.txt`; it never runs tools against your real workspace. Tests run isolated temporary sessions, not your active Pi conversation. The browser closes on assertion failure and the fixture shuts down in a `finally` block. Chromium requires its normal OS libraries. Set `PI_COMPANION_BROWSER` to an existing Chrome/Chromium executable to avoid another browser download.
+
+### Voice readback prompt evaluation
+
+The [readback validation notes](../../.ai/docs/realtime-voice/2026-09-14-voice-readback.md) record the official model/prompt guidance and the separation between receipts and Pi output. To evaluate the actual configured voice model with synthetic Pi progress and follow-up questions:
+
+```bash
+corepack pnpm exec tsx .ai/validation/live-readback-smoke.ts
+```
+
+This opt-in test generates audio over WebSocket and incurs provider charges. It uses the production voice prompt but synthetic Pi messages/tools, does not run work in your project, and closes its socket in `finally`. It is not a microphone/WebRTC test or a guarantee of every model response's wording.
 
 ## Cloudflare Tunnel + Access
 

@@ -3,6 +3,7 @@ Provider/audio are mocked by default. PI_COMPANION_LIVE=1 uses the real provider
 and requires PI_COMPANION_AUDIO pointing to a synthetic speech WAV (token charges).
 Run: uv run --no-project --with playwright python .ai/validation/companion-browser-smoke.py
 """
+from contextlib import ExitStack
 import json
 import os
 from pathlib import Path
@@ -26,21 +27,47 @@ def wait_state(request, url, predicate, timeout=30):
     raise AssertionError(json.dumps(state)[-15000:])
 
 
+def assert_live_media(page):
+    frame = next(f for f in page.frames if "/pi-realtime/" in f.url)
+    stats = frame.evaluate("""async () => {
+        const pc = window.testPeer;
+        const stats = [...(await pc.getStats()).values()];
+        return {peer: pc.connectionState, ice: pc.iceConnectionState,
+            sent: stats.filter(s => s.type === 'outbound-rtp' && s.kind === 'audio').reduce((n,s) => n + s.packetsSent, 0),
+            received: stats.filter(s => s.type === 'inbound-rtp' && s.kind === 'audio').reduce((n,s) => n + s.packetsReceived, 0),
+            played: document.getElementById('remote').currentTime};
+    }""")
+    assert stats["peer"] == "connected", stats
+    assert stats["sent"] > 0 and stats["received"] > 0 and stats["played"] > 0, stats
+    print("LIVE media:", stats)
+
+
 def exercise(info):
-    with sync_playwright() as p:
+    with sync_playwright() as p, ExitStack() as cleanup:
         args = []
         if LIVE:
             audio = os.environ["PI_COMPANION_AUDIO"]
             args = ["--use-fake-device-for-media-stream", "--use-fake-ui-for-media-stream", f"--use-file-for-fake-audio-capture={audio}%noloop"]
-        browser = p.chromium.launch(headless=True, args=args)
+        browser = p.chromium.launch(headless=True, args=args, executable_path=os.environ.get("PI_COMPANION_BROWSER"))
+        cleanup.callback(browser.close)
         context = browser.new_context(viewport={"width": 390, "height": 844})
+        if LIVE:
+            context.add_init_script("""
+                const NativePeer = window.RTCPeerConnection;
+                window.RTCPeerConnection = class extends NativePeer {
+                    constructor(...args) { super(...args); window.testPeer = this; }
+                };
+            """)
         if not LIVE:
             context.add_init_script("""
                 window.parent.stoppedTracks ||= 0;
                 if(navigator.mediaDevices) navigator.mediaDevices.getUserMedia=async()=>({getAudioTracks(){return [this.track]}, getTracks(){return [this.track]},track:{stop(){window.parent.stoppedTracks++}}});
                 window.RTCPeerConnection=class {
                     addTrack(){} createDataChannel(){return {close(){}}}
-                    async createOffer(){return {sdp:'v=0\\r\\n'}} async setLocalDescription(){} async setRemoteDescription(){} close(){}
+                    connectionState='new'; iceConnectionState='new';
+                    async createOffer(){return {sdp:'v=0\\r\\n'}} async setLocalDescription(){}
+                    async setRemoteDescription(){this.connectionState='connected';this.iceConnectionState='connected';this.onconnectionstatechange?.();}
+                    close(){this.connectionState='closed';}
                 };
             """)
         control = f"http://127.0.0.1:{info['control']}"
@@ -59,6 +86,10 @@ def exercise(info):
         if LIVE:
             state = wait_state(context.request, control, lambda s: any("apple" in str(e.get("transcript", "")).lower() and "pear" in str(e.get("transcript", "")).lower() for e in s["connections"][0]["events"]), timeout=45)
             print("LIVE transcripts:", [e["transcript"] for e in state["connections"][0]["events"] if e.get("transcript")])
+            assert_live_media(page)
+            # Stay connected past the reproduced 30-second media-negotiation failure.
+            page.wait_for_timeout(35000)
+            assert_live_media(page)
             # Take over with a real second WebRTC connection and restore voice context.
             other = context.new_page()
             other.on("dialog", lambda dialog: dialog.accept())
@@ -72,6 +103,7 @@ def exercise(info):
             context.request.post(control + "/ask")
             state = wait_state(context.request, control, lambda s: any("apple" in str(e.get("transcript", "")).lower() and "pear" in str(e.get("transcript", "")).lower() for e in s["connections"][1]["events"]), timeout=30)
             print("LIVE resumed transcripts:", [e["transcript"] for e in state["connections"][1]["events"] if e.get("transcript")])
+            assert_live_media(other)
             other_chat.locator("#hangup").click()
             wait_state(context.request, control, lambda s: s["connections"][1]["closed"])
             other.close()

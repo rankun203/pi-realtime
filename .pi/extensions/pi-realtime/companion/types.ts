@@ -21,7 +21,8 @@ export type VoiceTransport = {
 		instructions: string;
 		tools: VoiceEvent[];
 		onEvent(event: VoiceEvent): void;
-		onClose(): void;
+		/** Reports why the provider control connection ended; never include credentials. */
+		onClose(reason?: string): void;
 	}): Promise<VoiceConnection>;
 };
 export type VoiceMemory = {
