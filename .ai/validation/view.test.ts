@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { statusText, renderStatusText } from "../../.pi/extensions/pi-realtime/view";
 import { registerPiRealtime } from "../../.pi/extensions/pi-realtime/runtime";
+import { emptyUsageBreakdown } from "../../.pi/extensions/pi-realtime/usage";
 import type { RealtimeState } from "../../.pi/extensions/pi-realtime/types";
 
 function state(statuses: string[]): RealtimeState {
@@ -21,8 +22,39 @@ function state(statuses: string[]): RealtimeState {
 test("footer excludes recorded/stopped session totals", () => {
 	assert.equal(statusText(state([])), undefined);
 	assert.equal(statusText(state(["stopped", "stopped", "stopped"])), undefined);
-	assert.equal(statusText(state(["active", "stopped", "error"])), "pi-realtime: 1 active");
-	assert.equal(statusText(state(["active", "starting", "stopped"])), "pi-realtime: 2 active");
+	assert.equal(statusText(state(["active", "stopped", "error"])), "pi-realtime: 1 active · test");
+	assert.equal(statusText(state(["active", "starting", "stopped"])), "pi-realtime: 2 active · test");
+});
+
+test("footer lists distinct running models, excluding stopped models and future preferences", () => {
+	const current = state(["active", "starting", "stopped"]);
+	current.sessions.get("session-0")!.model = "gpt-realtime-2.1";
+	current.sessions.get("session-1")!.model = "gpt-realtime-2.1-mini";
+	current.sessions.get("session-2")!.model = "retired-model";
+	assert.equal(statusText(current), "pi-realtime: 2 active · gpt-realtime-2.1, gpt-realtime-2.1-mini");
+	current.sessions.get("session-1")!.model = "gpt-realtime-2.1";
+	assert.equal(statusText(current), "pi-realtime: 2 active · gpt-realtime-2.1");
+});
+
+test("compact footer separates uncached input, output, cache reads, and latest response hit rate", () => {
+	const current = state(["active"]);
+	const row = (at: number, input: number, cached: number, output: number, cost: number): any => ({
+		at,
+		providerSessionId: "session-0",
+		source: "response",
+		totalTokens: input + output,
+		input: { ...emptyUsageBreakdown(), audioTokens: input, cachedAudioTokens: cached },
+		output: { ...emptyUsageBreakdown(), audioTokens: output },
+		estimatedCostUsd: cost,
+	});
+	// Deliberately out of order: CH follows the latest response, not array order or cumulative totals.
+	current.usage = [row(2, 3000, 2900, 0, 0), row(1, 1000, 600, 200, 0.0123)];
+	assert.equal(statusText(current), "pi-realtime: ↑500 ↓200 R3.5k CH96.7% · $0.0123 (api) · test");
+	current.usageResets = [{ at: 1 }];
+	assert.equal(statusText(current), "pi-realtime: ↑100 ↓0 R2.9k CH96.7% · $0.0000 (api) · test");
+	current.usageResets = [];
+	current.usage = [row(3, 36605000, 36000000, 99000, 0.0123)];
+	assert.equal(statusText(current), "pi-realtime: ↑605k ↓99k R36M CH98.3% · $0.0123 (api) · test");
 });
 
 test("old usage never keeps the stopped footer visible", () => {

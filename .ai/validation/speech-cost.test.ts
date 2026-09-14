@@ -90,17 +90,21 @@ const row = (unknown: boolean): any => ({
 
 test("realtime footer never reports unknown pricing as zero dollars", () => {
 	assert.equal(formatUsageCost(aggregateUsage([row(true)])), "cost unknown");
-	assert.match(formatUsageCost(aggregateUsage([row(false)])), /\$0\.0120 est\./);
+	assert.match(formatUsageCost(aggregateUsage([row(false)])), /\$0\.0120 \(api\)/);
 	assert.match(formatUsageCost(aggregateUsage([row(false), row(true)])), /partial/);
-	const state: any = { sessions: new Map([["voice", { status: "active" }]]), usage: [row(true)], usageResets: [] };
-	assert.equal(statusText(state), "pi-realtime: 1 active · 100 voice tokens · cost unknown");
+	const state: any = {
+		sessions: new Map([["voice", { status: "active", model: "test-model" }]]),
+		usage: [row(true)],
+		usageResets: [],
+	};
+	assert.equal(statusText(state), "pi-realtime: ↑0 ↓0 · cost unknown · test-model");
 	state.usageResets = [{ at: 2 }];
-	assert.equal(statusText(state), "pi-realtime: 1 active");
+	assert.equal(statusText(state), "pi-realtime: 1 active · test-model");
 });
 
 test("voice cost display rounds to four decimals without changing accounting precision", () => {
 	const summary = aggregateUsage([{ ...row(false), estimatedCostUsd: 0.002677 }]);
-	assert.equal(formatUsageCost(summary), "$0.0027 est.");
+	assert.equal(formatUsageCost(summary), "$0.0027 (api)");
 	assert.equal(summary.estimatedCostUsd, 0.002677);
 });
 

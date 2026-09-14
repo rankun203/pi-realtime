@@ -284,7 +284,7 @@ test("WebRTC handoff ignores retired raw lifecycle events without losing cost ac
 	service.providerSink.onProviderEvent(usage(0.02));
 	rawSink.onProviderEvent(usage(0.01));
 	assert.equal(state.usage.length, 2, "late billable usage from the retired socket must still count");
-	assert.match(footers.at(-1)!, /200 voice tokens.*\$0\.0300 est/);
+	assert.match(footers.at(-1)!, /↑0 ↓0.*\$0\.0300 \(api\).*gpt-realtime-2\.1-mini/);
 	service.providerSink.onProviderEvent(event("disconnected", { reason: "user" }));
 	assert.equal(statusText(state), undefined, "a genuine current-session stop still hides the footer");
 	rawSink.onProviderEvent(event("connected"));

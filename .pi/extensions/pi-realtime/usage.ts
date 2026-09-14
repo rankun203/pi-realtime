@@ -20,6 +20,8 @@ export type UsageSummary = {
 	estimatedCostUsd: number;
 	excludedCostCount: number;
 	lastObservedAt?: number;
+	/** Cached share of input tokens in the latest response, as a percentage; absent before a response. */
+	lastResponseCacheHitPercent?: number;
 };
 
 type ModalityPricing = { input: number; cachedInput: number; output?: number };
@@ -111,8 +113,17 @@ export function aggregateUsage(
 		estimatedCostUsd: 0,
 		excludedCostCount: 0,
 	};
+	let latestResponseAt = -Infinity;
 	for (const row of rows) {
-		if (row.source === "response") summary.responseCount += 1;
+		if (row.source === "response") {
+			summary.responseCount += 1;
+			if (row.at >= latestResponseAt) {
+				latestResponseAt = row.at;
+				const input = row.input.textTokens + row.input.audioTokens + row.input.imageTokens;
+				const cached = row.input.cachedTextTokens + row.input.cachedAudioTokens + row.input.cachedImageTokens;
+				summary.lastResponseCacheHitPercent = input > 0 ? (cached / input) * 100 : undefined;
+			}
+		}
 		if (row.source === "input_transcription") summary.transcriptionCount += 1;
 		addBreakdown(summary.input, row.input);
 		addBreakdown(summary.output, row.output);
@@ -139,7 +150,7 @@ function latestResetAt(resets: readonly UsageReset[], providerSessionId?: Provid
 export function formatUsageCost(summary: UsageSummary): string {
 	if (summary.observations === 0) return "cost pending";
 	if (summary.excludedCostCount === summary.observations) return "cost unknown";
-	return `$${summary.estimatedCostUsd.toFixed(4)} est.${summary.excludedCostCount ? " (partial; unpriced usage excluded)" : ""}`;
+	return `$${summary.estimatedCostUsd.toFixed(4)} (api)${summary.excludedCostCount ? " (partial; unpriced usage excluded)" : ""}`;
 }
 
 export function renderUsageSummary(summary: UsageSummary, details = false): string {
