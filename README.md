@@ -12,7 +12,7 @@ This is a community fork of **[transcendr/pi-realtime](https://github.com/transc
 - **Automatic global settings:** reads the `pi-realtime.openai` section of Pi's `settings.json`.
 - **Separate realtime credentials in Pi's existing `auth.json`:** uses `pi-realtime:openai`, leaving `openai` and other coding credentials untouched.
 - **Configurable endpoint and authentication:** preserves OpenAI defaults; supports Azure `/openai/v1` endpoints and `api-key` auth for both HTTP and WebSocket connections.
-- **Server-owned browser voice companion:** one logical companion per Pi session, private voice handover, automatic near-verbatim readback of Pi output, and `post_message(message)` for queued user speech and follow-ups. Native input turns route through tools; tool-free readbacks cannot initiate work. Side conversations can choose silent waiting, subject to model judgment. Devices explicitly take over; disconnect/restart leaves Pi working.
+- **Server-owned browser voice companion:** one logical companion per Pi session, private voice handover, automatic listening-friendly spoken updates from Pi output (code, commands, and long paths are described by purpose unless explicitly requested aloud), and `post_message(message)` for queued user speech and follow-ups. Native input turns route through tools; tool-free readbacks cannot initiate work. Side conversations can choose silent waiting, subject to model judgment. Devices explicitly take over; disconnect/restart leaves Pi working.
 - **Server-owned provider negotiation:** the helper negotiates WebRTC and controls that same provider session through a sideband connection. Companion-mode browsers receive SDP and a device lease, not provider credentials. Legacy eco keeps its ephemeral-token path.
 - **Additional model profiles:** `gpt-realtime-2.1-mini` and `gpt-realtime-2.1`, plus support for a custom deployment name configured as the default model.
 - **Installed-package asset fix:** browser HTML/JavaScript resolve relative to the extension, not the project you happen to launch Pi from.
@@ -266,6 +266,12 @@ Log in at the proxy, grant microphone permission, and keep the page in the foreg
 When the Pi voice session changes, open its new session URL. The fixed server port and proxy configuration can stay the same. This repository supplies deployment support and examples; it does not automatically publish your server or provision DNS/TLS/access-control credentials.
 
 ## Troubleshooting silent or disconnected browser calls
+
+Server-side failures are recorded in the session JSONL trace under the system temporary directory's `pi-realtime-traces/` folder. The helper's `/config` response includes `debugTracePath`. Failed helper requests return an **Error ID** that matches a `request.failed` trace entry, with the route action, status, and safe diagnostics. Companion connection, cleanup, supervision, and control-channel failures also produce `voice.error` entries, including failures without an HTTP caller.
+
+Provider network errors identify the operation (session creation, call negotiation, control connection, or closure), hostname, and recognized underlying cause. For example, `ENOTFOUND` means hostname resolution failed; it is not evidence of a provider session timeout. HTTP rejection status and request timeouts are reported separately. New diagnostics exclude credentials, SDP, provider bodies, arbitrary error messages, and URL paths/query strings. Unknown failures remain explicitly unknown rather than being guessed as DNS problems. Existing traces can still contain conversation text; redact before sharing.
+
+The companion currently schedules a voice refresh at 55 minutes, independently of context-token usage. A refresh announcement alone does not mean the provider returned a timeout. Refreshing the browser cannot repair a server-side DNS or network failure. Check network/VPN DNS and retry once connectivity is restored; no automatic DNS bypass is used.
 
 A successful API-key check or SDP negotiation does **not** prove that browser audio can reach the provider. The browser now shows **Connecting voice media** until the WebRTC peer actually connects. On failure, the page preserves the provider/heartbeat error and logs ICE state and packet counters under **Debug events**. SDP, credentials, and device addresses are not included in those counters.
 

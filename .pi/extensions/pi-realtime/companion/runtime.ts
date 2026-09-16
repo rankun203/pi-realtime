@@ -3,6 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { boundedMessages, companionInstructions, companionTools, readbackResponse, startupContext } from "./prompt";
 import type { CompanionOptions, PiSnapshot, VoiceConnection, VoiceEvent, VoiceMemory } from "./types";
+import { voiceErrorRecord } from "./errors";
 
 type Lease = {
 	token: string;
@@ -71,7 +72,10 @@ export class VoiceCompanion {
 		}
 		this.timer = setInterval(() => {
 			void this.tick()
-				.catch(() => this.detach("Voice supervision failed"))
+				.catch((error) => {
+					this.options.onEvent?.({ type: "voice.error", action: "supervision", ...voiceErrorRecord(error) });
+					return this.detach("Voice supervision failed");
+				})
 				.catch(() => {});
 		}, 1000);
 		this.timer.unref();
@@ -156,7 +160,8 @@ export class VoiceCompanion {
 				);
 				return { answer: connection.answer, lease: lease.token };
 			} catch (error) {
-				if (this.lease === lease) await this.detach();
+				this.options.onEvent?.({ type: "voice.error", action: "connect", ...voiceErrorRecord(error) });
+				if (this.lease === lease) await this.detach().catch(() => {}); // detach logs cleanup failures independently.
 				throw error;
 			}
 		});
@@ -186,6 +191,9 @@ export class VoiceCompanion {
 		} finally {
 			try {
 				await lease.connection?.close();
+			} catch (error) {
+				this.options.onEvent?.({ type: "voice.error", action: "disconnect", ...voiceErrorRecord(error) });
+				throw error;
 			} finally {
 				this.options.bridge.lifecycle(
 					"Voice device disconnected. Continue normal work uninterrupted. No acknowledgement needed.",
@@ -300,7 +308,15 @@ export class VoiceCompanion {
 			// The only tool-capable spoken turn is the explicit lifecycle restart notice.
 			response: lease.noticeSent
 				? { output_modalities: ["audio"], tool_choice: { type: "function", name: "restart_voice" } }
-				: readbackResponse(lease.readback),
+				: readbackResponse(
+						lease.readback,
+						// Bound the user reference for explicit dictation requests; do not restore the conversation.
+						boundedMessages(
+							this.snapshot.messages.filter((message) => message.role === "user"),
+							1,
+							2000,
+						)[0]?.text,
+					),
 		});
 		lease.readback = [];
 	}

@@ -11,6 +11,7 @@ const result = spawnSync(
 		".ai/validation/native-agent.test.ts",
 		".ai/validation/start-command.test.ts",
 		".ai/validation/socket-open.test.ts",
+		".ai/validation/voice-errors.test.ts",
 		".ai/validation/view.test.ts",
 		".ai/validation/speech-cost.test.ts",
 		".ai/validation/dashboard.test.ts",

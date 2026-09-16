@@ -1,4 +1,6 @@
 import { homedir } from "node:os";
+import { randomUUID } from "node:crypto";
+import { VoiceTransportError, voiceErrorRecord } from "../../companion/errors";
 import { openAIContextWindowForModel } from "../../providers/openai/model-profiles";
 import { VoiceCompanion } from "../../companion/runtime";
 import { openAIVoiceTransport } from "../../companion/openai";
@@ -10,6 +12,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { loadRealtimeWebPort } from "../../env";
 import {
+	createDebugTraceRecorder,
 	createOutboxPollTraceState,
 	describeRealtimePayload,
 	nextOutboxPollTrace,
@@ -106,7 +109,8 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	}
 
 	registerSession(config: WebRTCHelperRegistrationConfig, sink: WebRTCHelperSink): void {
-		const { createClientSecret, normalizeUsageEvent, trace, ...sessionConfig } = config;
+		const { createClientSecret, normalizeUsageEvent, trace: suppliedTrace, ...sessionConfig } = config;
+		const trace = suppliedTrace ?? createDebugTraceRecorder(config.providerSessionId);
 		const session = {
 			config: { ...sessionConfig, debugTracePath: trace?.path },
 			createClientSecret,
@@ -148,6 +152,17 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 						responseReason: event.type === "response.done" ? event.response?.status_details?.reason : undefined,
 						errorCode: event.error?.code ?? event.response?.status_details?.error?.code,
 						reason: event.type === "voice.detached" ? event.reason : undefined,
+						...(event.type === "voice.error"
+							? {
+									action: event.action,
+									operation: event.operation,
+									hostname: event.hostname,
+									message: event.message,
+									kind: event.kind,
+									codes: event.codes,
+									httpStatus: event.httpStatus,
+								}
+							: {}),
 					});
 					const source =
 						event.type === "response.done"
@@ -245,6 +260,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	}
 
 	private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
+		let route: ReturnType<LocalWebRTCHelperServer["sessionRoute"]>;
 		try {
 			const url = new URL(req.url ?? "/", `http://${HOST}`);
 			if (req.method === "GET" && url.pathname === "/pi-realtime/discovery") {
@@ -260,14 +276,32 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 				});
 			}
 			if (this.tryServeStatic(req, res, url)) return;
-			const route = this.sessionRoute(url);
+			route = this.sessionRoute(url);
 			if (!route) return this.respond(res, 404, { error: "not_found" });
 			if (!sameOriginRequest(req)) return this.respond(res, 403, { error: "cross_origin_request_denied" });
 			await this.handleSessionRoute(req, res, url, route);
 		} catch (error) {
-			this.respond(res, (error as { statusCode?: number }).statusCode ?? 500, {
-				error: error instanceof Error ? error.message : String(error),
-			});
+			const status = (error as { statusCode?: number })?.statusCode ?? 500;
+			const errorId = randomUUID();
+			const session = route ? this.sessions.get(route.providerSessionId) : undefined;
+			const details = voiceErrorRecord(error);
+			const message =
+				error instanceof VoiceTransportError
+					? error.message
+					: status < 500 && error instanceof Error
+						? error.message
+						: `Voice server request failed (${details.kind}). See the server trace for diagnostics`;
+			const record = {
+				source: "helper_server",
+				eventType: "request.failed",
+				errorId,
+				action: route?.action ?? "route",
+				status,
+				...details,
+			};
+			if (session?.trace) session.trace.write(record);
+			else console.error("pi-realtime request failed", JSON.stringify(record));
+			this.respond(res, status, { error: message, errorId });
 		}
 	}
 

@@ -146,6 +146,29 @@ test("companion: queued receipts stay silent, but intermediate and final Pi mess
 	}
 });
 
+test("companion: isolated speech receives only a bounded latest user reference and unchanged Pi text", async () => {
+	const f = fixture();
+	try {
+		await f.companion.connect("v=0");
+		f.pi.messages.push(
+			{ id: "old", role: "user", text: "Old unrelated question", at: 1 },
+			{ id: "request", role: "user", text: "Read the command aloud. " + "x".repeat(3000), at: 2 },
+			{ id: "answer", role: "assistant", text: "Run `pnpm test` to run the tests.", at: 3 },
+		);
+		await f.companion.tick();
+		const response = f.connections[0].sent.find((e) => e.type === "response.create")!.response;
+		const text = response.input[0].content[0].text;
+		const payload = JSON.parse(text.slice(text.lastIndexOf("\n") + 1));
+		assert.equal(payload.latestUserText, f.pi.messages[1].text.slice(0, 2000));
+		assert.deepEqual(payload.messages, [f.pi.messages[2].text]);
+		assert.equal(response.conversation, "none");
+		assert.equal(response.tool_choice, "none");
+		assert.equal(f.posted.length, 0);
+	} finally {
+		await f.cleanup();
+	}
+});
+
 test("companion: a slow posting receipt cannot erase Pi progress already pending", async () => {
 	const f = fixture();
 	let release!: () => void;

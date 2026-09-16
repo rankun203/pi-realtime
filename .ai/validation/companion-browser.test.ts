@@ -84,7 +84,10 @@ function browser() {
 		readFileSync(resolve(__dirname, "../../.pi/extensions/pi-realtime/media/webrtc-helper/client.js"), "utf8"),
 		context,
 	);
-	vm.runInContext(`json = async () => ({answer: "fixture-answer", lease: "fixture-lease"});`, context);
+	vm.runInContext(
+		`const requestJson = json; json = async () => ({answer: "fixture-answer", lease: "fixture-lease"});`,
+		context,
+	);
 	return {
 		context,
 		elements,
@@ -96,6 +99,32 @@ function browser() {
 		start: () => vm.runInContext(`startCompanion({model: "test"}, connectionEpoch)`, context),
 	};
 }
+
+test("browser companion: server diagnostics and error IDs remain readable; local network errors are distinct", async () => {
+	const b = browser();
+	b.context.fetch = async () => ({
+		ok: false,
+		status: 500,
+		json: async () => ({
+			error: "Create realtime session failed for example.test: DNS lookup failed (ENOTFOUND).",
+			errorId: "reference-123",
+		}),
+	});
+	await assert.rejects(
+		vm.runInContext('requestJson("/long/internal/session/voice-connect")', b.context),
+		(error: any) => {
+			assert.match(error.message, /DNS lookup failed.*ENOTFOUND/);
+			assert.match(error.message, /reference-123/);
+			assert.doesNotMatch(error.message, /long\/internal/);
+			assert.equal(error.status, 500);
+			return true;
+		},
+	);
+	b.context.fetch = async () => {
+		throw new TypeError("fetch failed");
+	};
+	await assert.rejects(vm.runInContext('requestJson("/voice-connect")', b.context), /Cannot reach the Pi voice server/);
+});
 
 test("browser companion: SDP success cannot claim connected; native peer state owns status", async () => {
 	const b = browser();

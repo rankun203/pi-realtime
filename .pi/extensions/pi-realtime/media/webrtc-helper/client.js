@@ -561,11 +561,20 @@ async function postEvent(event, options = {}) {
 }
 
 async function json(url, options) {
-	const response = await fetch(url, options);
-	if (!response.ok)
-		throw Object.assign(new Error(`${url} failed: ${response.status} ${await response.text()}`), {
-			status: response.status,
-		});
+	let response;
+	try {
+		response = await fetch(url, options);
+	} catch {
+		throw new Error(
+			"Cannot reach the Pi voice server. Check that Pi is running and the network connection is available.",
+		);
+	}
+	if (!response.ok) {
+		const failure = await response.json().catch(() => ({}));
+		const message = typeof failure.error === "string" ? failure.error : "Voice server request failed";
+		const reference = typeof failure.errorId === "string" ? ` · Error ID: ${failure.errorId}` : "";
+		throw Object.assign(new Error(`${message} (HTTP ${response.status})${reference}`), { status: response.status });
+	}
 	return response.json();
 }
 

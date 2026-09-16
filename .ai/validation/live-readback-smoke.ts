@@ -69,11 +69,13 @@ async function main() {
 			type: "conversation.item.create",
 			item: { type: "message", role, content: [{ type: "input_text", text }] },
 		});
-	const response = async (readback?: string) => {
+	const response = async (readback?: string, latestUserText?: string) => {
 		const start = events.length;
 		send({
 			type: "response.create",
-			response: readback ? readbackResponse([{ id: "fixture", role: "assistant", text: readback, at: 0 }]) : {},
+			response: readback
+				? readbackResponse([{ id: "fixture", role: "assistant", text: readback, at: 0 }], latestUserText)
+				: {},
 		});
 		await wait(() => events.slice(start).some((event) => event.type === "response.done"));
 		return events.slice(start);
@@ -175,6 +177,24 @@ async function main() {
 			assert.match(text, fact);
 		assert.doesNotMatch(text, /\bcommitted\b/i, "Planned commit became a completed commit");
 		console.log("LIVE readback:", text);
+
+		const technical = await response(
+			'I will search the web using the Jina skill. Nothing has run yet.\nCommand: node ~/.pi/agent/skills/jina-api/scripts/jina.mjs search "Pi MCP integration"\n```js\nconst result = await fetch(url);\nconsole.log(await result.json());\n```',
+			"Search for Pi MCP integration and show the command.",
+		);
+		const technicalSpeech = transcript(technical);
+		assert.equal(calls(technical).length, 0);
+		assert.match(technicalSpeech, /search/i);
+		assert.match(technicalSpeech, /not|nothing|yet/i);
+		assert.doesNotMatch(
+			technicalSpeech,
+			/\bconst\b|console\s*(?:\.|dot)|fetch\s*\(|\.mjs|\bslash\b|homedir|~\/|node /i,
+		);
+		console.log("LIVE purpose-based speech:", technicalSpeech);
+		const literal = await response("The command is `pnpm test`.", "Please read the exact command aloud.");
+		assert.equal(calls(literal).length, 0);
+		assert.match(transcript(literal), /p[\s.]*n[\s.]*p[\s.]*m.*test/i);
+		console.log("LIVE requested dictation:", transcript(literal));
 
 		const followUp = "How long did unit validation take?";
 		item("user", followUp);
