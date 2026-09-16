@@ -4,7 +4,7 @@ import { buildOpenAIRealtimeAudioConfig, openAIRealtimeAudioInput } from "../pro
 import { providerInteractionFor } from "../domain/interaction-modes";
 import type { VoiceTransport } from "./types";
 import { nativeInputResponsePolicy } from "./prompt";
-import { VoiceTransportError, safeErrorDetails, voiceOperation, voiceErrorRecord } from "./errors";
+import { VoiceTransportError, safeErrorDetails, voiceOperation, voiceErrorRecord } from "../transport-errors";
 
 async function requireOk(response: Response): Promise<void> {
 	if (response.ok) return;

@@ -43,6 +43,13 @@ This repository is a Pi extension project. Use the `pi-extension-dev` skill for 
 - Pi should notice repeated realtime requests that look like feedback loops, stop reprocessing the same work, inspect traces/state, and report the loop rather than blindly executing duplicate backend work.
 - The realtime model’s own behavior contract lives in `.pi/extensions/pi-realtime/prompt.ts` and `.pi/extensions/pi-realtime/realtime-updates.ts`; update those files when changing how realtime distinguishes user audio from structured system updates.
 
+## Git workflow: main only
+
+- Work directly on `main`. Do not create or switch to another branch unless the user explicitly requests it.
+- Fetch before integrating or pushing, and preserve history with fast-forwards or ordinary merges. Never force-push or rewrite shared `main` history.
+- Commit and push completed work to `main`; verify the local and remote commit IDs match.
+- Do not recreate the retired Azure configuration, browser connectivity, or development branches.
+
 ## Required protocol
 
 - Follow `~/.codex/skills/pi-extension-dev/references/standard-repo-protocol.md`.

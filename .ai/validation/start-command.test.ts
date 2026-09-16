@@ -196,13 +196,15 @@ test("stopped and failed history does not prevent bare command starting voice", 
 	assert.deepEqual(f.calls, ["chat"]);
 });
 
-test("a rejected provider handshake cleans its adapter and records a stopped session", async () => {
+test("a rejected provider handshake is logged before browser startup and survives cleanup failure", async () => {
 	const events: any[] = [];
+	const traces: any[] = [];
 	const calls: string[] = [];
 	const service: any = createService(
 		{ append: (event: any) => events.push(event), state: () => ({ sessions: new Map() }) } as any,
 		{} as any,
 	);
+	service.debugTraces = { create: () => ({ write: (record: any) => traces.push(record) }) };
 	service.buildPackets = () => [{}];
 	service.providers = {
 		get: () => ({
@@ -214,6 +216,7 @@ test("a rejected provider handshake cleans its adapter and records a stopped ses
 				},
 				async disconnect() {
 					calls.push("closed");
+					throw new Error("cleanup failed");
 				},
 			}),
 		}),
@@ -223,6 +226,10 @@ test("a rejected provider handshake cleans its adapter and records a stopped ses
 		/OperationNotSupported/,
 	);
 	assert.deepEqual(calls, ["closed"]);
+	assert.deepEqual(
+		traces.map((record) => record.eventType),
+		["connection.start", "connection.failed", "connection.cleanup_failed"],
+	);
 	assert.equal(service.adapters.size, 0);
 	assert.equal(events.at(-1).kind, "session_stopped");
 	assert.equal(events.at(-1).reason, "connection failed");

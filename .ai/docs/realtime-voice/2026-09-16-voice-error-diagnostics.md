@@ -18,6 +18,12 @@ Deterministic coverage includes nested/aggregate causes, credential exclusion, a
 
 The full quality gate is blocked by existing missing `sentrux` tooling; the validation runner separately stops at its missing context-policy probe document after the 79 tests pass. The required extension-development skill/protocol path is absent in this environment. Speech-policy changes from the preceding task are included in the requested extension commit; their live model validation is documented separately.
 
+## Follow-up: initial startup and repository consolidation
+
+The initial raw WebSocket handshake uses a separate path before browser setup. It was still discarding socket error causes, and its trace was created only during WebRTC handoff. Reuse the safe diagnostic formatter at that boundary, create the trace before connecting, preserve it across browser handoff, and log startup/cleanup failures separately without replacing the primary exception. Add deterministic WebSocket DNS-failure and startup-before-browser trace regression coverage. This corrects a gap in the first diagnostics change; the separate current DNS probe alone never established an earlier request's cause.
+
+The user requested consolidation onto `main`, retirement of every other branch, and a main-only AGENTS rule. Fetch full history (the original checkout was shallow), merge outstanding `develop`/`main` history with Azure/browser work, and verify all retired tips are ancestors before deletion. Change the GitHub default branch to `main` before retiring the previous default. Preserve tags and shared history.
+
 ## Technical debt
 
 Unknown error messages are deliberately not copied to logs because they may contain credentials. The diagnostic allowlist may need new platform/provider codes over time. Existing non-diagnostic traces may contain conversation text and still require redaction before sharing. DNS remediation remains an operator action; no environment settings were changed.

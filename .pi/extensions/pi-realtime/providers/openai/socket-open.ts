@@ -1,5 +1,6 @@
 import type WebSocket from "ws";
 import type { IncomingMessage } from "node:http";
+import { VoiceTransportError, safeErrorDetails } from "../../transport-errors";
 
 /** Wait for a provider handshake; expose bounded JSON error details, never raw bodies or credentials. */
 export function awaitRealtimeSocketOpen(
@@ -27,13 +28,16 @@ export function awaitRealtimeSocketOpen(
 			} else resolve();
 		};
 		const opened = () => finish();
-		const failed = () => finish(new Error("OpenAI realtime socket error before open."));
+		const failed = (error: Error) =>
+			finish(
+				new VoiceTransportError("Open realtime connection", new URL(socket.url).hostname, safeErrorDetails(error)),
+			);
 		const closed = () => finish(new Error("OpenAI realtime socket closed before open."));
 		const rejected = (_request: unknown, incoming: IncomingMessage) => {
 			response = incoming;
 			let body = "";
 			const status = incoming.statusCode;
-			const report = () => finish(new Error(realtimeHandshakeError(status, body, apiKey)));
+			const report = () => finish(Object.assign(new Error(realtimeHandshakeError(status, body, apiKey)), { status }));
 			incoming.setEncoding("utf8");
 			incoming.on("data", (chunk: string) => {
 				body += chunk;
@@ -46,7 +50,7 @@ export function awaitRealtimeSocketOpen(
 			incoming.once("error", report);
 		};
 		const timer = setTimeout(
-			() => finish(new Error("Timed out waiting for OpenAI realtime socket to open.")),
+			() => finish(new DOMException("Timed out waiting for OpenAI realtime socket to open.", "TimeoutError")),
 			timeoutMs,
 		);
 		socket.once("open", opened);

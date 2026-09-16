@@ -47,7 +47,9 @@ function createOpenAIWebRTCMediaRuntime(deps: {
 			await input.currentAdapter?.disconnect("user");
 			if (input.dashboard) deps.webrtcHelper.setDashboard?.(input.dashboard);
 			await deps.webrtcHelper.start();
-			const trace = deps.debugTraces.create(input.session.providerSessionId);
+			const trace =
+				deps.debugTraces.recorderFor(input.session.providerSessionId) ??
+				deps.debugTraces.create(input.session.providerSessionId);
 			trace.write({
 				source: "provider_runtime",
 				direction: "start_webrtc_helper",

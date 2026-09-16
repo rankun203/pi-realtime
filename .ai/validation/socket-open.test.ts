@@ -24,6 +24,20 @@ async function serverTest(run: (url: string, server: ReturnType<typeof createSer
 	}
 }
 
+test("realtime handshake: initial DNS failure retains the hostname and cause without exposing secrets", async () => {
+	const socket = new WebSocket("wss://example.test/realtime?token=private-token", {
+		lookup(_hostname, _options, callback) {
+			callback(Object.assign(new Error("DNS failed private-token"), { code: "ENOTFOUND" }), "", 4);
+		},
+	});
+	await assert.rejects(awaitRealtimeSocketOpen(socket, "private-token"), (error: Error) => {
+		assert.match(error.message, /Open realtime connection.*example.test.*ENOTFOUND/);
+		assert.doesNotMatch(error.message, /private-token/);
+		return true;
+	});
+	assert.notEqual(socket.readyState, WebSocket.CONNECTING);
+});
+
 test("realtime handshake: reports Azure rejection details and closes the failed socket", async () => {
 	await serverTest(async (url, server) => {
 		const body = JSON.stringify({

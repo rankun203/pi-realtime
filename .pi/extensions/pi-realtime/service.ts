@@ -17,6 +17,7 @@ import {
 	voiceToolResultSent,
 } from "./events";
 import { createDebugTraceRegistry, describeProviderEvent } from "./debug-trace";
+import { voiceErrorRecord } from "./transport-errors";
 import { interactionMode, toolSurfaceFor } from "./domain/interaction-modes";
 import { chunkRealtimePushSpeech, type SpeechChunk } from "./domain/speech-chunking";
 import {
@@ -459,6 +460,9 @@ class RealtimeService implements Service {
 		const speechRendererMode = runtime.behaviorProfileForModel?.(input.model).backendUpdateSpeech?.rendering
 			?.systemPromptMode;
 		this.setAdapter(providerSessionId, adapter);
+		// Startup can fail before the browser helper exists; keep its evidence in the same session trace.
+		const trace = this.debugTraces.create(providerSessionId);
+		trace.write({ source: "service", eventType: "connection.start", model: input.model });
 		try {
 			await adapter.connect(
 				{
@@ -485,9 +489,12 @@ class RealtimeService implements Service {
 				},
 			);
 		} catch (error) {
+			trace.write({ source: "service", eventType: "connection.failed", ...voiceErrorRecord(error) });
 			// A rejected deployment must not leave a phantom starting session or socket.
 			try {
 				await adapter.disconnect("user");
+			} catch (cleanupError) {
+				trace.write({ source: "service", eventType: "connection.cleanup_failed", ...voiceErrorRecord(cleanupError) });
 			} finally {
 				this.adapters.delete(providerSessionId);
 				this.fakeAdapters.delete(providerSessionId);

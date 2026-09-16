@@ -1,6 +1,6 @@
 import { homedir } from "node:os";
 import { randomUUID } from "node:crypto";
-import { VoiceTransportError, voiceErrorRecord } from "../../companion/errors";
+import { VoiceTransportError, voiceErrorRecord } from "../../transport-errors";
 import { openAIContextWindowForModel } from "../../providers/openai/model-profiles";
 import { VoiceCompanion } from "../../companion/runtime";
 import { openAIVoiceTransport } from "../../companion/openai";

@@ -7,7 +7,7 @@ import {
 	VoiceTransportError,
 	safeErrorDetails,
 	voiceOperation,
-} from "../../.pi/extensions/pi-realtime/companion/errors";
+} from "../../.pi/extensions/pi-realtime/transport-errors";
 import { openAIVoiceTransport } from "../../.pi/extensions/pi-realtime/companion/openai";
 import { createWebRTCHelperServer } from "../../.pi/extensions/pi-realtime/media/webrtc-helper/server";
 

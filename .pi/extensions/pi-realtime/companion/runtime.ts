@@ -3,7 +3,7 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { boundedMessages, companionInstructions, companionTools, readbackResponse, startupContext } from "./prompt";
 import type { CompanionOptions, PiSnapshot, VoiceConnection, VoiceEvent, VoiceMemory } from "./types";
-import { voiceErrorRecord } from "./errors";
+import { voiceErrorRecord } from "../transport-errors";
 
 type Lease = {
 	token: string;
