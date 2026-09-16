@@ -62,6 +62,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	constructor(private readonly options: HelperOptions) {}
 	private server: Server | undefined;
 	private port: number | undefined;
+	private errorTrace: DebugTraceRecorder | undefined;
 	private dashboard: DashboardBridge | undefined;
 	setDashboard(bridge: DashboardBridge): void {
 		this.dashboard = bridge;
@@ -257,7 +258,11 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 			(session) =>
 				`- ${session.config.providerSessionId} ${session.config.model} lastSeen=${Date.now() - session.lastSeenAt}ms outbox=${session.outbox.length}`,
 		);
-		return [`webrtc helper: http://${HOST}:${this.port}`, ...rows].join("\n");
+		return [
+			`webrtc helper: http://${HOST}:${this.port}`,
+			...(this.errorTrace ? [`helper error log: ${this.errorTrace.path}`] : []),
+			...rows,
+		].join("\n");
 	}
 
 	private async handle(req: IncomingMessage, res: ServerResponse): Promise<void> {
@@ -298,11 +303,29 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 				errorId,
 				action: route?.action ?? "route",
 				status,
+				providerSessionId: route?.providerSessionId,
 				...details,
 			};
-			if (session?.trace) session.trace.write(record);
-			else console.error("pi-realtime request failed", JSON.stringify(record));
+			this.logRequestFailure(record, session?.trace);
 			this.respond(res, status, { error: message, errorId });
+		}
+	}
+
+	private logRequestFailure(record: Record<string, unknown>, trace?: DebugTraceRecorder): void {
+		if (trace) {
+			try {
+				trace.write(record);
+				return;
+			} catch {
+				// Fall back to the helper log if the session trace is unavailable.
+			}
+		}
+		try {
+			this.errorTrace ??= createDebugTraceRecorder(`helper-errors-${process.pid}`);
+			this.errorTrace.write(record);
+		} catch {
+			// Never write to the terminal or reject the HTTP handler when logging fails.
+			// The caller still receives the original failure and its correlation ID.
 		}
 	}
 
@@ -332,7 +355,12 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		url: URL,
 		route: { providerSessionId: ProviderSessionId; action: string },
 	): Promise<void> {
-		const session = this.requireSession(route.providerSessionId);
+		const session = this.sessions.get(route.providerSessionId);
+		if (!session) {
+			throw Object.assign(new Error("Voice session is no longer available. Open the current URL from Pi."), {
+				statusCode: 410,
+			});
+		}
 		session.lastSeenAt = Date.now();
 		const companion = this.companionOwner === route.providerSessionId ? this.companion : undefined;
 		if (companion && req.method === "POST" && route.action.startsWith("voice-")) {
