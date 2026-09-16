@@ -560,6 +560,7 @@ class RealtimeService implements Service {
 		for (const session of this.store.state().sessions.values())
 			if (session.status === "active" || session.status === "starting")
 				await this.stopSession(session.providerSessionId, "shutdown");
+		this.currentCtx?.ui.setStatus("pi-realtime.error", undefined);
 		this.currentCtx = undefined;
 	}
 
@@ -640,7 +641,14 @@ class RealtimeService implements Service {
 	}
 
 	private async handleProviderEvent(event: NormalizedProviderEvent): Promise<void> {
-		this.traceProviderEvent(event);
+		if (event.type === "error") {
+			this.reportBackgroundError(
+				event.providerSessionId,
+				`${event.provider} error`,
+				event.message,
+				describeProviderEvent(event),
+			);
+		} else this.traceProviderEvent(event);
 		this.store.append(providerEventObserved(event));
 		if (event.type === "usage") {
 			this.store.append(usageObserved(event.observation));
@@ -741,7 +749,6 @@ class RealtimeService implements Service {
 		if (!notify) return;
 		if (event.type === "assistant_transcript" && event.final) notify(`Realtime ${event.provider}: ${event.text}`);
 		else if (event.type === "tool_call") notify(`Realtime ${event.provider} tool call: ${event.call.name}`);
-		else if (event.type === "error") notify(`Realtime ${event.provider} error: ${event.message}`, "warning");
 	}
 
 	private warnIfRawEchoRisk(providerSessionId: ProviderSessionId, adapter: RealtimeProviderAdapter): void {
@@ -754,7 +761,29 @@ class RealtimeService implements Service {
 
 	private handleAudioError(providerSessionId: ProviderSessionId, kind: AudioManagerErrorKind, error: Error): void {
 		const label = kind === "microphone" ? "microphone" : "audio playback";
-		this.currentCtx?.ui.notify(`Realtime ${label} error for ${providerSessionId}: ${error.message}`, "warning");
+		this.reportBackgroundError(providerSessionId, `${label} error`, error.message);
+	}
+
+	private reportBackgroundError(
+		providerSessionId: ProviderSessionId,
+		kind: string,
+		message: string,
+		details: Record<string, unknown> = {},
+	): void {
+		let logged = false;
+		try {
+			const recorder = this.debugTraces.recorderFor(providerSessionId) ?? this.debugTraces.create(providerSessionId);
+			recorder.write({ source: "service", direction: "background_error", kind, message, ...details });
+			logged = true;
+		} catch {
+			// A full/unwritable disk must not turn background diagnostics into UI spam.
+		}
+		// One stable footer slot; raw messages (including multiline provider bodies)
+		// stay in the trace rather than becoming permanent transcript notifications.
+		this.currentCtx?.ui.setStatus(
+			"pi-realtime.error",
+			`Realtime: ${kind}; ${logged ? "details: /realtime debug" : "error log unavailable"}`,
+		);
 	}
 
 	private handleProviderAudio(chunk: { providerSessionId: ProviderSessionId; audio: Buffer }): void {
