@@ -37,7 +37,7 @@ Remove the upstream package first if it is already installed, to avoid duplicate
 
 ```bash
 pi remove npm:pi-realtime
-pi install git:github.com/rankun203/pi-realtime@azure-global-config
+pi install git:github.com/rankun203/pi-realtime@main
 ```
 
 Only run the removal command if you have that package installed. If you previously installed a local copy, remove its registered path before adding the GitHub package. Then restart Pi or run `/reload`.
@@ -284,7 +284,7 @@ A `409` from `voice-heartbeat` means the device lease is no longer active. It ca
 Use nvm, Corepack, and the pinned pnpm version:
 
 ```bash
-git clone --branch azure-global-config https://github.com/rankun203/pi-realtime.git
+git clone --branch main https://github.com/rankun203/pi-realtime.git
 cd pi-realtime
 nvm install 22
 nvm use 22

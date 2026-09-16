@@ -1,6 +1,6 @@
 {
 	"name": "pi-realtime",
-	"version": "0.2.0",
+	"version": "0.2.1",
 	"packageManager": "pnpm@10.30.3",
 	"private": false,
 	"description": "Pi realtime voice with isolated global configuration and OpenAI/Azure API-key support.",

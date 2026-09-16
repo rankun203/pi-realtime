@@ -34,6 +34,7 @@ export type { WebRTCHelperServer } from "./protocol";
 const HOST = "127.0.0.1";
 const CLIENT_HTML = join(__dirname, "client.html");
 const CLIENT_JS = join(__dirname, "client.js");
+const SESSION_CLEANUP_GRACE_MS = 5_000;
 
 type HelperSession = {
 	config: WebRTCHelperSessionConfig;
@@ -211,7 +212,7 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 		session.sink.onProviderEvent(this.normalize(session, { type: "disconnected", reason }) as NormalizedProviderEvent);
 		setTimeout(() => {
 			if (this.sessions.get(providerSessionId) === session) this.sessions.delete(providerSessionId);
-		}, 5000).unref();
+		}, SESSION_CLEANUP_GRACE_MS).unref();
 	}
 
 	isCompanion(providerSessionId: ProviderSessionId): boolean {
@@ -486,11 +487,16 @@ class LocalWebRTCHelperServer implements WebRTCHelperServer {
 	}
 
 	private serveFile(res: ServerResponse, path: string, contentType: string): void {
+		const content = readFileSync(path);
 		res.writeHead(200, { "content-type": contentType, "cache-control": "no-store" });
-		res.end(readFileSync(path));
+		res.end(content);
 	}
 
 	private respond(res: ServerResponse, status: number, body: unknown): void {
+		if (res.headersSent) {
+			res.end();
+			return;
+		}
 		res.writeHead(status, { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" });
 		res.end(JSON.stringify(body));
 	}
